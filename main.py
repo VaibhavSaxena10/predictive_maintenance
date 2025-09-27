@@ -134,3 +134,20 @@ plt.title('Actual vs Predicted RUL')
 plt.legend()
 plt.savefig("rul_comparison.png", dpi=300)
 plt.show()
+
+from tensorflow.keras.models import load_model
+import os
+
+# -----------------------------
+# Save Models
+# -----------------------------
+model_dir = "saved_models"
+os.makedirs(model_dir, exist_ok=True)
+
+# Save LSTM
+lstm_model.save(os.path.join(model_dir, "lstm_model.h5"))
+print("✅ LSTM model saved!")
+
+# Save GRU
+gru_model.save(os.path.join(model_dir, "gru_model.h5"))
+print("✅ GRU model saved!")
