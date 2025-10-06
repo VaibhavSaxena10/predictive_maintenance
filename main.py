@@ -1,7 +1,7 @@
 # ===============================
 # Predictive Maintenance: LSTM & GRU
 # ===============================
-
+import os 
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler
@@ -105,6 +105,51 @@ gru_history = gru_model.fit(
     callbacks=[early_stop],
     verbose=2
 )
+
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+import numpy as np
+
+# Predictions
+y_pred_lstm = lstm_model.predict(X_val)
+y_pred_gru = gru_model.predict(X_val)
+
+# Metrics for LSTM
+mae_lstm = mean_absolute_error(y_val, y_pred_lstm)
+rmse_lstm = np.sqrt(mean_squared_error(y_val, y_pred_lstm))
+r2_lstm = r2_score(y_val, y_pred_lstm)
+
+# Metrics for GRU
+mae_gru = mean_absolute_error(y_val, y_pred_gru)
+rmse_gru = np.sqrt(mean_squared_error(y_val, y_pred_gru))
+r2_gru = r2_score(y_val, y_pred_gru)
+
+print("\n📊 Model Evaluation Results:")
+print(f"LSTM → MAE: {mae_lstm:.2f}, RMSE: {rmse_lstm:.2f}, R²: {r2_lstm:.3f}")
+print(f"GRU  → MAE: {mae_gru:.2f}, RMSE: {rmse_gru:.2f}, R²: {r2_gru:.3f}")
+
+# -----------------------------------
+# 💾 Save or Append Results to CSV
+# -----------------------------------
+results_df = pd.DataFrame({
+    'Model': ['LSTM', 'GRU'],
+    'MAE': [mae_lstm, mae_gru],
+    'RMSE': [rmse_lstm, rmse_gru],
+    'R2': [r2_lstm, r2_gru]
+})
+
+# Create results directory
+os.makedirs("results", exist_ok=True)
+csv_path = "results/model_evaluation_results.csv"
+
+# If file exists, append new results; else, create a new one
+if os.path.exists(csv_path):
+    existing_df = pd.read_csv(csv_path)
+    combined_df = pd.concat([existing_df, results_df], ignore_index=True)
+    combined_df.to_csv(csv_path, index=False)
+    print(f"\n✅ Results appended to: {csv_path}")
+else:
+    results_df.to_csv(csv_path, index=False)
+    print(f"\n✅ Results saved successfully to: {csv_path}")
 
 # -----------------------------
 # 8️⃣ Plot Validation Loss Comparison
