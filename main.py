@@ -1,198 +1,165 @@
 # ===============================
-# Predictive Maintenance: LSTM & GRU
+# Predictive Maintenance (Multi-Dataset Version)
 # ===============================
-import os 
+
 import pandas as pd
 import numpy as np
+import os
+import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import train_test_split
-import matplotlib.pyplot as plt
-from tensorflow.keras.models import Sequential
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.layers import LSTM, GRU, Dense, Dropout
 from tensorflow.keras.callbacks import EarlyStopping
 
 # -----------------------------
-# 1️⃣ Load Dataset
+# Helper: Load and Preprocess Dataset
 # -----------------------------
-column_names = [
-    'engine_id', 'cycle', 
-    'op_setting_1', 'op_setting_2', 'op_setting_3'
-] + [f'sensor_{i}' for i in range(1, 22)]
+def load_and_preprocess(file_path):
+    column_names = [
+        'engine_id', 'cycle',
+        'op_setting_1', 'op_setting_2', 'op_setting_3'
+    ] + [f'sensor_{i}' for i in range(1, 22)]
 
-train_df = pd.read_csv("data/train_FD001.txt", sep=" ", header=None)
-train_df.dropna(axis=1, how='all', inplace=True)
-train_df.columns = column_names
+    df = pd.read_csv(file_path, sep=" ", header=None)
+    df.dropna(axis=1, how='all', inplace=True)
+    df.columns = column_names
 
-# -----------------------------
-# 2️⃣ Compute RUL
-# -----------------------------
-rul_df = train_df.groupby('engine_id')['cycle'].max().reset_index()
-rul_df.columns = ['engine_id', 'max_cycle']
-train_df = train_df.merge(rul_df, on='engine_id', how='left')
-train_df['RUL'] = train_df['max_cycle'] - train_df['cycle']
-train_df.drop('max_cycle', axis=1, inplace=True)
+    # Compute RUL
+    rul_df = df.groupby('engine_id')['cycle'].max().reset_index()
+    rul_df.columns = ['engine_id', 'max_cycle']
+    df = df.merge(rul_df, on='engine_id', how='left')
+    df['RUL'] = df['max_cycle'] - df['cycle']
+    df.drop('max_cycle', axis=1, inplace=True)
 
-# -----------------------------
-# 3️⃣ Normalize Sensor Data
-# -----------------------------
-sensor_cols = [f'sensor_{i}' for i in range(1, 22)]
-scaler = MinMaxScaler()
-train_df[sensor_cols] = scaler.fit_transform(train_df[sensor_cols])
+    # Normalize sensors
+    sensor_cols = [f'sensor_{i}' for i in range(1, 22)]
+    scaler = MinMaxScaler()
+    df[sensor_cols] = scaler.fit_transform(df[sensor_cols])
 
-# -----------------------------
-# 4️⃣ Create Sequences
-# -----------------------------
-SEQ_LENGTH = 10
-X, y = [], []
+    # Create sequences
+    SEQ_LENGTH = 10
+    X, y = [], []
+    for engine_id in df['engine_id'].unique():
+        engine_data = df[df['engine_id'] == engine_id]
+        sensors = engine_data[sensor_cols].values
+        rul = engine_data['RUL'].values
+        for i in range(len(engine_data) - SEQ_LENGTH + 1):
+            X.append(sensors[i:i+SEQ_LENGTH])
+            y.append(rul[i+SEQ_LENGTH-1])
 
-for engine_id in train_df['engine_id'].unique():
-    engine_data = train_df[train_df['engine_id'] == engine_id]
-    sensors = engine_data[sensor_cols].values
-    rul = engine_data['RUL'].values
-    
-    for i in range(len(engine_data) - SEQ_LENGTH + 1):
-        X.append(sensors[i:i+SEQ_LENGTH])
-        y.append(rul[i+SEQ_LENGTH-1])
+    X = np.array(X, dtype='float32')
+    y = np.array(y, dtype='float32')
 
-X = np.array(X, dtype='float32')
-y = np.array(y, dtype='float32')
+    return X, y
 
 # -----------------------------
-# 5️⃣ Train-Test Split
+# Helper: Build Model
 # -----------------------------
-X_train, X_val, y_train, y_val = train_test_split(
-    X, y, test_size=0.2, random_state=42, shuffle=True
-)
+def build_model(model_type, input_shape):
+    model = Sequential()
+    if model_type == "LSTM":
+        model.add(LSTM(100, input_shape=input_shape, return_sequences=True))
+        model.add(Dropout(0.2))
+        model.add(LSTM(50, return_sequences=False))
+    else:
+        model.add(GRU(100, input_shape=input_shape, return_sequences=True))
+        model.add(Dropout(0.2))
+        model.add(GRU(50, return_sequences=False))
 
-# -----------------------------
-# 6️⃣ LSTM Model
-# -----------------------------
-lstm_model = Sequential()
-lstm_model.add(LSTM(100, input_shape=(X.shape[1], X.shape[2]), return_sequences=True))
-lstm_model.add(Dropout(0.2))
-lstm_model.add(LSTM(50, return_sequences=False))
-lstm_model.add(Dropout(0.2))
-lstm_model.add(Dense(1, activation='linear'))
-lstm_model.compile(optimizer='adam', loss='mse', metrics=['mae'])
-
-early_stop = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
-
-lstm_history = lstm_model.fit(
-    X_train, y_train,
-    validation_data=(X_val, y_val),
-    epochs=50,
-    batch_size=32,
-    callbacks=[early_stop],
-    verbose=2
-)
+    model.add(Dropout(0.2))
+    model.add(Dense(1, activation='linear'))
+    model.compile(optimizer='adam', loss='mse', metrics=['mae'])
+    return model
 
 # -----------------------------
-# 7️⃣ GRU Model
+# Main Loop for All Datasets
 # -----------------------------
-gru_model = Sequential()
-gru_model.add(GRU(100, input_shape=(X.shape[1], X.shape[2]), return_sequences=True))
-gru_model.add(Dropout(0.2))
-gru_model.add(GRU(50, return_sequences=False))
-gru_model.add(Dropout(0.2))
-gru_model.add(Dense(1, activation='linear'))
-gru_model.compile(optimizer='adam', loss='mse', metrics=['mae'])
+datasets = ["FD001", "FD002", "FD003", "FD004"]
+results = []
 
-gru_history = gru_model.fit(
-    X_train, y_train,
-    validation_data=(X_val, y_val),
-    epochs=50,
-    batch_size=32,
-    callbacks=[early_stop],
-    verbose=2
-)
+for ds in datasets:
+    print(f"\n🚀 Processing Dataset: {ds}")
+    file_path = f"data/train_{ds}.txt"
 
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-import numpy as np
+    if not os.path.exists(file_path):
+        print(f"⚠️ {file_path} not found, skipping...")
+        continue
 
-# Predictions
-y_pred_lstm = lstm_model.predict(X_val)
-y_pred_gru = gru_model.predict(X_val)
+    X, y = load_and_preprocess(file_path)
+    X_train, X_val, y_train, y_val = train_test_split(
+        X, y, test_size=0.2, random_state=42, shuffle=True
+    )
 
-# Metrics for LSTM
-mae_lstm = mean_absolute_error(y_val, y_pred_lstm)
-rmse_lstm = np.sqrt(mean_squared_error(y_val, y_pred_lstm))
-r2_lstm = r2_score(y_val, y_pred_lstm)
+    model_dir = f"saved_models/{ds}"
+    os.makedirs(model_dir, exist_ok=True)
 
-# Metrics for GRU
-mae_gru = mean_absolute_error(y_val, y_pred_gru)
-rmse_gru = np.sqrt(mean_squared_error(y_val, y_pred_gru))
-r2_gru = r2_score(y_val, y_pred_gru)
+    lstm_path = os.path.join(model_dir, "lstm_model.h5")
+    gru_path = os.path.join(model_dir, "gru_model.h5")
 
-print("\n📊 Model Evaluation Results:")
-print(f"LSTM → MAE: {mae_lstm:.2f}, RMSE: {rmse_lstm:.2f}, R²: {r2_lstm:.3f}")
-print(f"GRU  → MAE: {mae_gru:.2f}, RMSE: {rmse_gru:.2f}, R²: {r2_gru:.3f}")
+    if os.path.exists(lstm_path) and os.path.exists(gru_path):
+        print("✅ Loading pre-trained models...")
+        lstm_model = load_model(lstm_path)
+        gru_model = load_model(gru_path)
+    else:
+        print("⚙️ Training new models...")
+        early_stop = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
 
-# -----------------------------------
-# 💾 Save or Append Results to CSV
-# -----------------------------------
-results_df = pd.DataFrame({
-    'Model': ['LSTM', 'GRU'],
-    'MAE': [mae_lstm, mae_gru],
-    'RMSE': [rmse_lstm, rmse_gru],
-    'R2': [r2_lstm, r2_gru]
-})
+        lstm_model = build_model("LSTM", (X.shape[1], X.shape[2]))
+        gru_model = build_model("GRU", (X.shape[1], X.shape[2]))
 
-# Create results directory
+        lstm_model.fit(
+            X_train, y_train,
+            validation_data=(X_val, y_val),
+            epochs=50, batch_size=32,
+            callbacks=[early_stop], verbose=2
+        )
+        gru_model.fit(
+            X_train, y_train,
+            validation_data=(X_val, y_val),
+            epochs=50, batch_size=32,
+            callbacks=[early_stop], verbose=2
+        )
+
+        lstm_model.save(lstm_path)
+        gru_model.save(gru_path)
+        print("✅ Models trained and saved!")
+
+    # Evaluate
+    y_pred_lstm = lstm_model.predict(X_val)
+    y_pred_gru = gru_model.predict(X_val)
+
+    mae_lstm = mean_absolute_error(y_val, y_pred_lstm)
+    rmse_lstm = np.sqrt(mean_squared_error(y_val, y_pred_lstm))
+    r2_lstm = r2_score(y_val, y_pred_lstm)
+
+    mae_gru = mean_absolute_error(y_val, y_pred_gru)
+    rmse_gru = np.sqrt(mean_squared_error(y_val, y_pred_gru))
+    r2_gru = r2_score(y_val, y_pred_gru)
+
+    results.append([ds, "LSTM", mae_lstm, rmse_lstm, r2_lstm])
+    results.append([ds, "GRU", mae_gru, rmse_gru, r2_gru])
+
+    # Plot Comparison
+    result_dir = f"results/{ds}"
+    os.makedirs(result_dir, exist_ok=True)
+    plt.figure(figsize=(10, 5))
+    plt.plot(y_val[:200], label='Actual RUL')
+    plt.plot(y_pred_lstm[:200], label='LSTM Predicted')
+    plt.plot(y_pred_gru[:200], label='GRU Predicted')
+    plt.title(f'Actual vs Predicted RUL ({ds})')
+    plt.xlabel('Sample')
+    plt.ylabel('RUL')
+    plt.legend()
+    plt.savefig(f"{result_dir}/rul_comparison_{ds}.png", dpi=300)
+    plt.close()
+
+# -----------------------------
+# Save Final Evaluation Results
+# -----------------------------
+results_df = pd.DataFrame(results, columns=['Dataset', 'Model', 'MAE', 'RMSE', 'R2'])
 os.makedirs("results", exist_ok=True)
-csv_path = "results/model_evaluation_results.csv"
+results_df.to_csv("results/all_datasets_evaluation.csv", index=False)
 
-# If file exists, append new results; else, create a new one
-if os.path.exists(csv_path):
-    existing_df = pd.read_csv(csv_path)
-    combined_df = pd.concat([existing_df, results_df], ignore_index=True)
-    combined_df.to_csv(csv_path, index=False)
-    print(f"\n✅ Results appended to: {csv_path}")
-else:
-    results_df.to_csv(csv_path, index=False)
-    print(f"\n✅ Results saved successfully to: {csv_path}")
-
-# -----------------------------
-# 8️⃣ Plot Validation Loss Comparison
-# -----------------------------
-plt.figure(figsize=(10,5))
-plt.plot(lstm_history.history['val_loss'], label='LSTM val_loss')
-plt.plot(gru_history.history['val_loss'], label='GRU val_loss')
-plt.xlabel('Epoch')
-plt.ylabel('MSE Loss')
-plt.title('LSTM vs GRU Validation Loss')
-plt.legend()
-plt.show()
-
-# -----------------------------
-# 9️⃣ Predict and Compare RUL
-# -----------------------------
-y_pred_lstm = lstm_model.predict(X_val)
-y_pred_gru = gru_model.predict(X_val)
-
-plt.figure(figsize=(10,5))
-plt.plot(y_val, label='Actual RUL')
-plt.plot(y_pred_lstm, label='LSTM Predicted RUL')
-plt.plot(y_pred_gru, label='GRU Predicted RUL')
-plt.xlabel('Sample')
-plt.ylabel('RUL')
-plt.title('Actual vs Predicted RUL')
-plt.legend()
-plt.savefig("rul_comparison.png", dpi=300)
-plt.show()
-
-from tensorflow.keras.models import load_model
-import os
-
-# -----------------------------
-# Save Models
-# -----------------------------
-model_dir = "saved_models"
-os.makedirs(model_dir, exist_ok=True)
-
-# Save LSTM
-lstm_model.save(os.path.join(model_dir, "lstm_model.h5"))
-print("✅ LSTM model saved!")
-
-# Save GRU
-gru_model.save(os.path.join(model_dir, "gru_model.h5"))
-print("✅ GRU model saved!")
+print("\n✅ All datasets processed and results saved in 'results/all_datasets_evaluation.csv'")
