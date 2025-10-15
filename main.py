@@ -1,11 +1,3 @@
-"""
-Predictive Maintenance: LSTM, GRU, TCN, Transformer benchmarking across FD001-FD004
-Now includes:
-- Runtime accuracy tracker (console + CSV)
-- Training curve plotting
-- Final summary plots for all datasets and models
-"""
-
 import os
 import numpy as np
 import pandas as pd
@@ -17,19 +9,12 @@ import tensorflow as tf
 from tensorflow.keras.models import Sequential, load_model, Model
 from tensorflow.keras.layers import (Input, Dense, Dropout, LSTM, GRU,
                                      LayerNormalization, MultiHeadAttention,
-                                     GlobalAveragePooling1D, Conv1D)
-from tensorflow.keras.callbacks import EarlyStopping, Callback
+                                     GlobalAveragePooling1D, BatchNormalization,
+                                     Bidirectional)
+from tensorflow.keras.callbacks import EarlyStopping, Callback, ReduceLROnPlateau
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.regularizers import l2
 
-# Try importing TCN
-try:
-    from tcn import TCN
-except Exception:
-    TCN = None
-    print("⚠️ keras-tcn not installed. Install with: pip install keras-tcn")
-
-# ---------------------------
-# Config
-# ---------------------------
 SEQ_LENGTH = 10
 BATCH_SIZE = 32
 EPOCHS = 40
@@ -41,9 +26,7 @@ RESULTS_DIR = "results"
 os.makedirs(MODEL_DIR, exist_ok=True)
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
-# ---------------------------
-# Utility Functions
-# ---------------------------
+
 def load_cmapss_train(file_path):
     cols = ['engine_id', 'cycle', 'op_setting_1', 'op_setting_2', 'op_setting_3'] + [f'sensor_{i}' for i in range(1, 22)]
     df = pd.read_csv(file_path, sep=' ', header=None)
@@ -133,9 +116,6 @@ def plot_training_curves_from_csv(csv_file, model_name, dataset_name, out_dir):
     print(f"📊 Saved training curve from CSV for {model_name} → {out_path}")
 
 
-# ---------------------------
-# Callbacks
-# ---------------------------
 class LiveAccuracyTrackerCSV(Callback):
     """Prints live metrics and saves per-epoch metrics to CSV."""
     def __init__(self, out_file):
@@ -158,51 +138,57 @@ class LiveAccuracyTrackerCSV(Callback):
         pd.DataFrame(self.logs_list).to_csv(self.out_file, index=False)
 
 
-# ---------------------------
-# Model Builders
-# ---------------------------
+# Improved LSTM with Bidirectional Layers
 def build_lstm(input_shape):
     model = Sequential([
-        LSTM(100, input_shape=input_shape, return_sequences=True),
-        Dropout(0.2),
-        LSTM(50, return_sequences=False),
-        Dropout(0.2),
+        Bidirectional(LSTM(128, return_sequences=True,
+                           activation='tanh', recurrent_activation='sigmoid',
+                           kernel_regularizer=l2(0.01), recurrent_regularizer=l2(0.01)),
+                      input_shape=input_shape),
+        BatchNormalization(),
+        Dropout(0.3),
+
+        Bidirectional(LSTM(64, return_sequences=False,
+                           activation='tanh', recurrent_activation='sigmoid',
+                           kernel_regularizer=l2(0.01), recurrent_regularizer=l2(0.01))),
+        BatchNormalization(),
+        Dropout(0.3),
+
         Dense(1, activation='linear')
     ])
-    model.compile(optimizer='adam', loss='mse', metrics=['mae'])
+
+    optimizer = Adam(learning_rate=0.001, clipnorm=1.0)
+    model.compile(optimizer=optimizer, loss='mse', metrics=['mae'])
     return model
 
 
+# Improved GRU with Bidirectional Layers
 def build_gru(input_shape):
     model = Sequential([
-        GRU(100, input_shape=input_shape, return_sequences=True),
-        Dropout(0.2),
-        GRU(50, return_sequences=False),
-        Dropout(0.2),
+        Bidirectional(GRU(128, return_sequences=True,
+                          activation='tanh', recurrent_activation='sigmoid',
+                          kernel_regularizer=l2(0.01), recurrent_regularizer=l2(0.01),
+                          reset_after=True),
+                      input_shape=input_shape),
+        BatchNormalization(),
+        Dropout(0.3),
+
+        Bidirectional(GRU(64, return_sequences=False,
+                          activation='tanh', recurrent_activation='sigmoid',
+                          kernel_regularizer=l2(0.01), recurrent_regularizer=l2(0.01),
+                          reset_after=True)),
+        BatchNormalization(),
+        Dropout(0.3),
+
         Dense(1, activation='linear')
     ])
-    model.compile(optimizer='adam', loss='mse', metrics=['mae'])
+
+    optimizer = Adam(learning_rate=0.001, clipnorm=1.0)
+    model.compile(optimizer=optimizer, loss='mse', metrics=['mae'])
     return model
 
 
-def build_tcn(input_shape):
-    if TCN is not None:
-        i = Input(shape=input_shape)
-        x = TCN(nb_filters=64, kernel_size=3, nb_stacks=1, dilations=[1, 2, 4, 8],
-                use_skip_connections=True)(i)
-        out = Dense(1, activation='linear')(x)
-        model = Model(i, out)
-        model.compile(optimizer='adam', loss='mse', metrics=['mae'])
-        return model
-    i = Input(shape=input_shape)
-    x = Conv1D(64, kernel_size=3, padding='causal', activation='relu')(i)
-    x = GlobalAveragePooling1D()(x)
-    out = Dense(1)(x)
-    model = Model(i, out)
-    model.compile(optimizer='adam', loss='mse', metrics=['mae'])
-    return model
-
-
+# Improved positional encoding
 def positional_encoding(seq_len, d_model):
     pos = np.arange(seq_len)[:, np.newaxis]
     i = np.arange(d_model)[np.newaxis, :]
@@ -211,55 +197,70 @@ def positional_encoding(seq_len, d_model):
     pe = np.zeros((seq_len, d_model))
     pe[:, 0::2] = np.sin(angle_rads[:, 0::2])
     pe[:, 1::2] = np.cos(angle_rads[:, 1::2])
-    return tf.cast(pe, dtype=tf.float32)
+    return tf.cast(pe[np.newaxis, :], dtype=tf.float32)
 
 
-def build_transformer(input_shape, d_model=64, num_heads=4, ff_dim=128):
+# Improved Transformer with 2 Transformer blocks
+def build_transformer(input_shape, d_model=64, num_heads=4, ff_dim=256):
     seq_len, n_features = input_shape
     inputs = Input(shape=input_shape)
-    x = Dense(d_model)(inputs)
+
+    x = Dense(d_model, kernel_regularizer=l2(0.01))(inputs)
     pe = positional_encoding(seq_len, d_model)
     x = x + pe
-    attn = MultiHeadAttention(num_heads=num_heads, key_dim=d_model // num_heads)(x, x)
-    x = LayerNormalization(epsilon=1e-6)(x + attn)
-    ff = Dense(ff_dim, activation='relu')(x)
-    ff = Dense(d_model)(ff)
-    x = LayerNormalization(epsilon=1e-6)(x + ff)
-    x = GlobalAveragePooling1D()(x)
-    outputs = Dense(1, activation='linear')(x)
+
+    attn1 = MultiHeadAttention(num_heads=num_heads, key_dim=d_model // num_heads,
+                               dropout=0.1)(x, x)
+    x1 = LayerNormalization(epsilon=1e-6)(x + attn1)
+
+    ff1 = Dense(ff_dim, activation='relu', kernel_regularizer=l2(0.01))(x1)
+    ff1 = Dropout(0.2)(ff1)
+    ff1 = Dense(d_model, kernel_regularizer=l2(0.01))(ff1)
+    x2 = LayerNormalization(epsilon=1e-6)(x1 + ff1)
+
+    attn2 = MultiHeadAttention(num_heads=num_heads, key_dim=d_model // num_heads,
+                               dropout=0.1)(x2, x2)
+    x3 = LayerNormalization(epsilon=1e-6)(x2 + attn2)
+
+    ff2 = Dense(ff_dim, activation='relu', kernel_regularizer=l2(0.01))(x3)
+    ff2 = Dropout(0.2)(ff2)
+    ff2 = Dense(d_model, kernel_regularizer=l2(0.01))(ff2)
+    x4 = LayerNormalization(epsilon=1e-6)(x3 + ff2)
+
+    x_out = GlobalAveragePooling1D()(x4)
+    x_out = Dropout(0.3)(x_out)
+    outputs = Dense(1, activation='linear')(x_out)
+
     model = Model(inputs, outputs)
-    model.compile(optimizer='adam', loss='mse', metrics=['mae'])
+
+    optimizer = Adam(learning_rate=0.001, clipnorm=1.0)
+    model.compile(optimizer=optimizer, loss='mse', metrics=['mae'])
     return model
 
 
-# ---------------------------
-# Summary Plot Function
-# ---------------------------
 def plot_summary(results_df, out_path):
-    """Plot final summary of MAE and RMSE for all models across datasets."""
     datasets = results_df['Dataset'].unique()
     models = results_df['Model'].unique()
     width = 0.2
     x = np.arange(len(datasets))
 
     plt.figure(figsize=(12, 5))
-    # MAE plot
+
     plt.subplot(1, 2, 1)
     for i, model in enumerate(models):
         vals = results_df[results_df['Model'] == model]['MAE']
         plt.bar(x + i * width, vals, width=width, label=model)
-    plt.xticks(x + width * (len(models)-1)/2, datasets)
+    plt.xticks(x + width * (len(models) - 1) / 2, datasets)
     plt.xlabel('Dataset')
     plt.ylabel('MAE')
     plt.title('MAE Comparison')
     plt.legend()
 
-    # RMSE plot
     plt.subplot(1, 2, 2)
     for i, model in enumerate(models):
         vals = results_df[results_df['Model'] == model]['RMSE']
         plt.bar(x + i * width, vals, width=width, label=model)
-    plt.xticks(x + width * (len(models)-1)/2, datasets)
+    plt.xticks(x + width * (len(models) - 1) / 2, datasets)
     plt.xlabel('Dataset')
     plt.ylabel('RMSE')
     plt.title('RMSE Comparison')
@@ -271,14 +272,13 @@ def plot_summary(results_df, out_path):
     print(f"📊 Saved final summary plot → {out_path}")
 
 
-# ---------------------------
-# Main Loop
-# ---------------------------
 all_results = []
+lr_scheduler = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=3, verbose=1)
+
 
 for ds in DATASETS:
     print(f"\n🚀 Processing Dataset: {ds}")
-    file_path = f"data/train_{ds}.txt"
+    file_path = os.path.join("Data", f"train_{ds}.txt")
     if not os.path.exists(file_path):
         print(f"❌ {file_path} not found. Skipping.")
         continue
@@ -295,7 +295,6 @@ for ds in DATASETS:
     paths = {
         'LSTM': os.path.join(ds_model_dir, 'lstm.keras'),
         'GRU': os.path.join(ds_model_dir, 'gru.keras'),
-        'TCN': os.path.join(ds_model_dir, 'tcn.keras'),
         'TRF': os.path.join(ds_model_dir, 'transformer.keras')
     }
 
@@ -312,7 +311,6 @@ for ds in DATASETS:
             print(f"🧠 Building new {name} model for {ds}")
             if name == 'LSTM': models[name] = build_lstm((X.shape[1], X.shape[2]))
             elif name == 'GRU': models[name] = build_gru((X.shape[1], X.shape[2]))
-            elif name == 'TCN': models[name] = build_tcn((X.shape[1], X.shape[2]))
             else: models[name] = build_transformer((X.shape[1], X.shape[2]))
 
     for name, model in models.items():
@@ -325,7 +323,7 @@ for ds in DATASETS:
                 validation_data=(X_val, y_val),
                 epochs=EPOCHS,
                 batch_size=BATCH_SIZE,
-                callbacks=[cb, LiveAccuracyTrackerCSV(csv_tracker_path)],
+                callbacks=[cb, LiveAccuracyTrackerCSV(csv_tracker_path), lr_scheduler],
                 verbose=0
             )
             model.save(paths[name])
@@ -347,12 +345,10 @@ for ds in DATASETS:
     save_plot(y_val, preds, plot_path)
     print(f"🖼️ Saved RUL comparison plot → {plot_path}")
 
-# Save overall comparison
 results_df = pd.DataFrame(all_results, columns=['Dataset', 'Model', 'MAE', 'RMSE', 'R2'])
 csv_out = os.path.join(RESULTS_DIR, "all_datasets_comparison.csv")
 results_df.to_csv(csv_out, index=False)
 print(f"\n✅ All done! Consolidated results saved → {csv_out}")
 
-# Generate summary plot
 summary_plot_path = os.path.join(RESULTS_DIR, "summary_mae_rmse_comparison.png")
 plot_summary(results_df, summary_plot_path)
