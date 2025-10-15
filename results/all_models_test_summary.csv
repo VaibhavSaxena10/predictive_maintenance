@@ -1,0 +1,17 @@
+Dataset,Model,Predicted_RUL,Health_Status,Error
+FD001,LSTM,32.44,Critical 🔴,
+FD001,GRU,16.55,Critical 🔴,
+FD001,TCN,,,Model not found at saved_models\FD001\tcn.keras
+FD001,TRANSFORMER,19.42,Critical 🔴,
+FD002,LSTM,-1.21,Critical 🔴,
+FD002,GRU,-4.77,Critical 🔴,
+FD002,TCN,,,Model not found at saved_models\FD002\tcn.keras
+FD002,TRANSFORMER,-5.58,Critical 🔴,
+FD003,LSTM,60.77,Warning 🟡,
+FD003,GRU,126.3,Healthy ✅,
+FD003,TCN,,,Model not found at saved_models\FD003\tcn.keras
+FD003,TRANSFORMER,11.34,Critical 🔴,
+FD004,LSTM,18.39,Critical 🔴,
+FD004,GRU,23.67,Critical 🔴,
+FD004,TCN,,,Model not found at saved_models\FD004\tcn.keras
+FD004,TRANSFORMER,10.85,Critical 🔴,
