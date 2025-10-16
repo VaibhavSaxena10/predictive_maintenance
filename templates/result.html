@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Prediction Result</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <div class="container">
+    {% if error %}
+      <h2 style="color:red;">❌ {{ error }}</h2>
+      <a href="/">Go Back</a>
+    {% else %}
+      <h2>Model Used: <b>{{ model }}</b></h2>
+      <h3>Predicted RUL: <span style="color:blue;">{{ rul }}</span></h3>
+     <h3>Status: <span class="status-{{ color }}">{{ status }}</span></h3>
+
+      <a href="/">🔙 New Prediction</a>
+    {% endif %}
+  </div>
+</body>
+</html>

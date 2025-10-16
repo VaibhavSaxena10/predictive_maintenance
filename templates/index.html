@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Predictive Maintenance Input</title>
+</head>
+<body>
+  <h1>🔧 Predictive Maintenance Dashboard</h1>
+
+  <form method="POST" action="/predict" enctype="multipart/form-data">
+    <label>Select Model:</label>
+    <select name="model_name" required>
+      {% for m in models %}
+        <option value="{{ m }}">{{ m }}</option>
+      {% endfor %}
+    </select>
+    <br><br>
+
+    <label>Select Input Mode:</label><br>
+    <input type="radio" name="input_mode" value="dataset" required> Use Dataset Sample <br>
+    <input type="radio" name="input_mode" value="random"> Generate Random Sensor Sample <br>
+    <input type="radio" name="input_mode" value="pdf"> Upload PDF (Sensor Data) <br><br>
+
+    <label>Upload PDF (only if PDF mode selected):</label>
+    <input type="file" name="pdf_file" accept="application/pdf"><br><br>
+
+    <button type="submit">🚀 Predict</button>
+  </form>
+</body>
+</html>
