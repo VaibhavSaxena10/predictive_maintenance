@@ -2,29 +2,54 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Predictive Maintenance Input</title>
+  <title>Predictive Maintenance Dashboard</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-  <h1>🔧 Predictive Maintenance Dashboard</h1>
+  <div class="container">
+    <h1>🛠️ Predictive Maintenance</h1>
+    <form method="POST" enctype="multipart/form-data">
+      <label>Select Model:</label>
+      <select name="model_name" required>
+        {% for model in models %}
+        <option value="{{ model }}">{{ model }}</option>
+        {% endfor %}
+      </select>
 
-  <form method="POST" action="/predict" enctype="multipart/form-data">
-    <label>Select Model:</label>
-    <select name="model_name" required>
-      {% for m in models %}
-        <option value="{{ m }}">{{ m }}</option>
-      {% endfor %}
-    </select>
-    <br><br>
+      <label>Choose Input Option:</label>
+      <select name="input_option" id="input_option" onchange="toggleInputFields()">
+        <option value="random">🎲 Random Sensor Data</option>
+        <option value="dataset">📂 Load from Dataset Sample</option>
+        <option value="pdf">📄 Upload PDF File</option>
+      </select>
 
-    <label>Select Input Mode:</label><br>
-    <input type="radio" name="input_mode" value="dataset" required> Use Dataset Sample <br>
-    <input type="radio" name="input_mode" value="random"> Generate Random Sensor Sample <br>
-    <input type="radio" name="input_mode" value="pdf"> Upload PDF (Sensor Data) <br><br>
+      <div id="pdf_input" style="display:none;">
+        <label>Upload PDF:</label>
+        <input type="file" name="pdf_file" accept=".pdf">
+      </div>
 
-    <label>Upload PDF (only if PDF mode selected):</label>
-    <input type="file" name="pdf_file" accept="application/pdf"><br><br>
+      <button type="submit">🚀 Predict RUL</button>
+    </form>
 
-    <button type="submit">🚀 Predict</button>
-  </form>
+    {% if result %}
+    <div class="result">
+      {% if result.error %}
+      <p style="color:red;">⚠️ {{ result.error }}</p>
+      {% else %}
+      <h3>Prediction Result:</h3>
+      <p><b>Model Used:</b> {{ result.model_used }}</p>
+      <p><b>Predicted RUL:</b> {{ result.predicted_RUL }}</p>
+      <p><b>Machine Status:</b> {{ result.machine_status }}</p>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+
+  <script>
+    function toggleInputFields() {
+      const option = document.getElementById("input_option").value;
+      document.getElementById("pdf_input").style.display = option === "pdf" ? "block" : "none";
+    }
+  </script>
 </body>
 </html>

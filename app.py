@@ -1,16 +1,19 @@
-from flask import Flask, request, jsonify, render_template
 import os
 import numpy as np
+import pandas as pd
+from flask import Flask, request, render_template, jsonify
 import tensorflow as tf
 from tensorflow.keras.models import load_model
-from tensorflow.keras.layers import MultiHeadAttention, LayerNormalization, Dense, Dropout, Conv1D, GlobalAveragePooling1D
-import pandas as pd
+from tensorflow.keras.layers import (
+    MultiHeadAttention, LayerNormalization, Dense, Dropout,
+    Conv1D, GlobalAveragePooling1D
+)
 from PyPDF2 import PdfReader
 
 app = Flask(__name__)
 
 # ----------------------------
-# Utility: Scan all saved models
+# Load and map all models
 # ----------------------------
 def get_all_models(base_dir="saved_models"):
     model_paths = {}
@@ -37,106 +40,141 @@ CUSTOM_OBJECTS = {
     "Dropout": Dropout,
 }
 
+
 # ----------------------------
-# Routes
+# Helper functions
 # ----------------------------
-@app.route("/")
+def get_health_status(rul_value):
+    if rul_value > 80:
+        return "Healthy ✅"
+    elif rul_value > 40:
+        return "Moderate ⚠️"
+    else:
+        return "Critical 🔴"
+
+
+def extract_pdf_data(pdf_file):
+    """Extracts numeric sensor data from a PDF."""
+    reader = PdfReader(pdf_file)
+    text = ""
+    for page in reader.pages:
+        text += page.extract_text() + "\n"
+
+    numbers = []
+    for token in text.replace("\n", " ").split():
+        try:
+            numbers.append(float(token))
+        except ValueError:
+            continue
+
+    if len(numbers) < 21:
+        raise ValueError("Not enough numeric data found in the PDF.")
+
+    arr = np.array(numbers[:21], dtype=np.float32).reshape(1, 1, -1)
+    return arr
+
+
+# ----------------------------
+# ROUTES
+# ----------------------------
+@app.route("/", methods=["GET", "POST"])
 def home():
-    return render_template("index.html", models=list(MODEL_PATHS.keys()))
+    models = list(MODEL_PATHS.keys())
+
+    if request.method == "POST":
+        try:
+            model_name = request.form.get("model_name")
+            input_option = request.form.get("input_option")
+
+            # ✅ Handle input selection
+            if input_option == "random":
+                input_data = np.random.rand(1, 10, 21).astype(np.float32)
+
+            elif input_option == "dataset":
+                sample_path = os.path.join("sample_data", "sample_fd001.csv")
+                if os.path.exists(sample_path):
+                    df = pd.read_csv(sample_path)
+                    arr = df.values[:10, :21]
+                    input_data = np.expand_dims(arr, axis=0)
+                else:
+                    raise FileNotFoundError("Sample dataset not found in /sample_data/")
+
+            elif input_option == "pdf":
+                pdf_file = request.files.get("pdf_file")
+                if not pdf_file or pdf_file.filename == "":
+                    raise ValueError("No PDF uploaded.")
+                input_data = extract_pdf_data(pdf_file)
+
+            else:
+                raise ValueError("Invalid input option selected.")
+
+            # ✅ Load model if not cached
+            if model_name not in MODELS:
+                MODELS[model_name] = load_model(
+                    MODEL_PATHS[model_name],
+                    compile=False,
+                    custom_objects=CUSTOM_OBJECTS
+                )
+
+            model = MODELS[model_name]
+            prediction = model.predict(input_data)
+            rul_value = float(prediction.flatten()[0])
+
+            # ✅ Prepare results for display
+            result = {
+                "model_used": model_name,
+                "predicted_RUL": round(rul_value, 2),
+                "machine_status": get_health_status(rul_value)
+            }
+
+            return render_template("result.html", result=result)
+
+        except Exception as e:
+            error_message = str(e)
+            return render_template("result.html", result={"error": error_message})
+
+    return render_template("index.html", models=models)
 
 
 @app.route("/predict", methods=["POST"])
-def predict_page():
-    model_name = request.form.get("model_name")
-    input_mode = request.form.get("input_mode")  # dataset / random / pdf
+def predict_api():
+    """API endpoint for JSON requests."""
+    data = request.get_json()
+    if not data or "model_name" not in data or "input" not in data:
+        return jsonify({"error": "Missing 'model_name' or 'input' keys."}), 400
 
-    if not model_name or not input_mode:
-        return render_template("result.html", error="⚠️ Please select a model and input mode.")
+    model_name = data["model_name"]
+    input_data = np.array(data["input"], dtype=np.float32)
 
-    # ----------------------------
-    # Input mode 1: From dataset
-    # ----------------------------
-    if input_mode == "dataset":
-        dataset_name = model_name.split("_")[0]
-        file_path = f"data/train_{dataset_name}.txt"
-        if not os.path.exists(file_path):
-            return render_template("result.html", error=f"Dataset file {file_path} not found.")
+    try:
+        if model_name not in MODELS:
+            MODELS[model_name] = load_model(
+                MODEL_PATHS[model_name],
+                compile=False,
+                custom_objects=CUSTOM_OBJECTS
+            )
 
-        df = pd.read_csv(file_path, sep=" ", header=None)
-        df.dropna(axis=1, how="all", inplace=True)
-        sensor_data = df.iloc[0:10, 5:26].values  # take 10 cycles, 21 sensors
-        input_data = np.expand_dims(sensor_data, axis=0)
+        model = MODELS[model_name]
+        if len(input_data.shape) == 2:
+            input_data = np.expand_dims(input_data, axis=0)
 
-    # ----------------------------
-    # Input mode 2: Random sample
-    # ----------------------------
-    elif input_mode == "random":
-        input_data = np.random.rand(1, 10, 21).astype(np.float32)
+        prediction = model.predict(input_data)
+        rul_value = float(prediction.flatten()[0])
 
-    # ----------------------------
-    # Input mode 3: PDF upload
-    # ----------------------------
-    elif input_mode == "pdf":
-        if "pdf_file" not in request.files or request.files["pdf_file"].filename == "":
-            return render_template("result.html", error="⚠️ Please upload a PDF file.")
-        pdf_file = request.files["pdf_file"]
+        return jsonify({
+            "model_used": model_name,
+            "predicted_RUL": round(rul_value, 2),
+            "machine_status": get_health_status(rul_value)
+        })
 
-        try:
-            reader = PdfReader(pdf_file)
-            text = ""
-            for page in reader.pages:
-                text += page.extract_text()
-            # Extract numbers from the text
-            numbers = [float(x) for x in text.replace("\n", " ").split() if x.replace(".", "", 1).isdigit()]
-            if len(numbers) < 210:
-                return render_template("result.html", error="⚠️ PDF doesn't contain enough numeric sensor values.")
-            input_data = np.array(numbers[:210], dtype=np.float32).reshape(1, 10, 21)
-        except Exception as e:
-            return render_template("result.html", error=f"Failed to read PDF: {e}")
-
-    else:
-        return render_template("result.html", error="Invalid input mode selected.")
-
-    # ----------------------------
-    # Model Loading and Prediction
-    # ----------------------------
-    if model_name not in MODEL_PATHS:
-        return render_template("result.html", error=f"Model '{model_name}' not found.")
-
-    if model_name not in MODELS:
-        try:
-            MODELS[model_name] = load_model(MODEL_PATHS[model_name], compile=False, custom_objects=CUSTOM_OBJECTS)
-        except Exception as e:
-            return render_template("result.html", error=f"Failed to load model {model_name}: {e}")
-
-    model = MODELS[model_name]
-    prediction = model.predict(input_data)
-    rul_value = float(prediction.flatten()[0])
-
-    # ----------------------------
-    # Health Status
-    # ----------------------------
-    if rul_value > 80:
-        status, color = "Healthy ✅", "green"
-    elif rul_value > 40:
-        status, color = "Moderate ⚠️", "orange"
-    else:
-        status, color = "Critical 🔴", "red"
-
-    return render_template(
-        "result.html",
-        model_name=model_name,
-        rul=round(rul_value, 2),
-        status=status,
-        color=color,
-        input_mode=input_mode
-    )
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":
-    print("🔍 Scanning for models...")
+    print("🔍 Scanning models...")
     if MODEL_PATHS:
         print(f"✅ Found {len(MODEL_PATHS)} models: {list(MODEL_PATHS.keys())}")
     else:
-        print("⚠️ No models found.")
+        print("⚠️ No models found. Please run training first.")
     app.run(debug=True)

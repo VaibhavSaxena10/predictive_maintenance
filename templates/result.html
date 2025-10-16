@@ -1,22 +1,177 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Prediction Result</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-</head>
-<body>
-  <div class="container">
-    {% if error %}
-      <h2 style="color:red;">❌ {{ error }}</h2>
-      <a href="/">Go Back</a>
-    {% else %}
-      <h2>Model Used: <b>{{ model }}</b></h2>
-      <h3>Predicted RUL: <span style="color:blue;">{{ rul }}</span></h3>
-     <h3>Status: <span class="status-{{ color }}">{{ status }}</span></h3>
+/* =========================
+   🌙 Global Styles
+========================= */
+body {
+  font-family: 'Segoe UI', sans-serif;
+  background: linear-gradient(135deg, #0d1117 0%, #161b22 100%);
+  color: #fff;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  margin: 0;
+  transition: background 0.5s ease, color 0.5s ease;
+}
 
-      <a href="/">🔙 New Prediction</a>
-    {% endif %}
-  </div>
-</body>
-</html>
+/* =========================
+   🌌 Container (Card)
+========================= */
+.container {
+  background: #161b22;
+  padding: 35px 40px;
+  border-radius: 18px;
+  width: 520px;
+  box-shadow: 0 0 25px rgba(88, 166, 255, 0.1);
+  border: 1px solid rgba(88, 166, 255, 0.15);
+  transition: all 0.3s ease-in-out;
+}
+
+.container:hover {
+  box-shadow: 0 0 35px rgba(88, 166, 255, 0.25);
+  transform: translateY(-3px);
+}
+
+h1 {
+  color: #58a6ff;
+  text-align: center;
+  margin-bottom: 25px;
+  font-size: 1.8em;
+  letter-spacing: 1px;
+}
+
+/* =========================
+   📋 Form Styling
+========================= */
+form {
+  display: flex;
+  flex-direction: column;
+}
+
+label {
+  margin-top: 12px;
+  font-weight: 600;
+  color: #c9d1d9;
+}
+
+textarea, select {
+  margin-top: 6px;
+  padding: 12px;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  background: #0d1117;
+  color: #fff;
+  font-size: 15px;
+  resize: none;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+textarea:focus, select:focus {
+  border-color: #58a6ff;
+  box-shadow: 0 0 5px rgba(88, 166, 255, 0.5);
+  outline: none;
+}
+
+/* =========================
+   🟩 Button
+========================= */
+button {
+  margin-top: 25px;
+  padding: 12px;
+  background: linear-gradient(135deg, #238636, #2ea043);
+  border: none;
+  color: white;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  transition: all 0.3s ease;
+}
+
+button:hover {
+  background: linear-gradient(135deg, #2ea043, #3fb950);
+  transform: scale(1.05);
+}
+
+/* =========================
+   🌞 Light Mode
+========================= */
+.light-mode {
+  background: linear-gradient(135deg, #f6f8fa 0%, #ffffff 100%);
+  color: #24292f;
+}
+
+.light-mode .container {
+  background: #ffffff;
+  box-shadow: 0 0 25px rgba(0, 0, 0, 0.1);
+  border: 1px solid #d0d7de;
+}
+
+.light-mode h1 {
+  color: #0969da;
+}
+
+.light-mode textarea,
+.light-mode select {
+  background: #f6f8fa;
+  color: #24292f;
+  border: 1px solid #d0d7de;
+}
+
+.light-mode textarea:focus,
+.light-mode select:focus {
+  border-color: #0969da;
+  box-shadow: 0 0 6px rgba(9, 105, 218, 0.4);
+}
+
+.light-mode button {
+  background: linear-gradient(135deg, #218bff, #42a0ff);
+}
+
+.light-mode button:hover {
+  background: linear-gradient(135deg, #42a0ff, #58a6ff);
+}
+
+/* =========================
+   🌓 Toggle Switch
+========================= */
+.toggle-container {
+  position: absolute;
+  top: 20px;
+  right: 30px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #58a6ff;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.toggle-switch {
+  width: 50px;
+  height: 26px;
+  background: #30363d;
+  border-radius: 13px;
+  position: relative;
+  transition: background 0.4s ease;
+}
+
+.toggle-switch::before {
+  content: '';
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  background: #fff;
+  border-radius: 50%;
+  top: 2px;
+  left: 2px;
+  transition: all 0.3s ease;
+}
+
+.light-mode .toggle-switch {
+  background: #58a6ff;
+}
+
+.light-mode .toggle-switch::before {
+  transform: translateX(24px);
+}
