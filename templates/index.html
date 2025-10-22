@@ -1,38 +1,56 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Predictive Maintenance Dashboard</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
 </head>
-
 <body>
-
-    <!-- 🌗 Theme Toggle -->
     <div class="toggle-container" onclick="toggleTheme()">
         <div class="toggle-switch"></div>
         <span id="theme-label">Dark Mode 🌙</span>
     </div>
-
-    <!-- ⚙️ Main Container -->
     <div class="container">
-        <h1>🚀 Predictive Maintenance</h1>
-
-        <form id="predictForm" method="POST" action="/predict">
+        <h1>🔧 Predictive Maintenance</h1>
+        <form method="POST" enctype="multipart/form-data">
             <label for="model_name">Select Model:</label>
-            <select name="model_name" id="model_name">
+            <select name="model_name" id="model_name" required>
                 {% for model in models %}
                 <option value="{{ model }}">{{ model }}</option>
                 {% endfor %}
             </select>
 
-            <label for="input_data">Enter Sensor Data (comma separated):</label>
-            <textarea name="input_data" id="input_data" rows="5" placeholder="e.g. 0.45, 0.23, 0.56, ..."></textarea>
+            <label>Select Input Data Option:</label>
+            <div>
+                <input type="radio" id="dataset" name="input_option" value="dataset" checked />
+                <label for="dataset">Use Dataset Sample</label>
+            </div>
+            <div>
+                <input type="radio" id="random" name="input_option" value="random" />
+                <label for="random">Generate Random Sensor Data</label>
+            </div>
+            <div>
+                <input type="radio" id="csv" name="input_option" value="csv" />
+                <label for="csv">Upload CSV File</label>
+            </div>
+            <div>
+                <input type="radio" id="pdf" name="input_option" value="pdf" />
+                <label for="pdf">Upload PDF File</label>
+            </div>
+
+            <div id="fileInputCsv" style="display:none;">
+                <label for="csv_file">Upload CSV (CSV format, values only):</label>
+                <input type="file" name="csv_file" id="csv_file" accept=".csv" />
+            </div>
+            <div id="fileInputPdf" style="display:none;">
+                <label for="pdf_file">Upload PDF:</label>
+                <input type="file" name="pdf_file" id="pdf_file" accept="application/pdf" />
+            </div>
 
             <button type="submit">Predict RUL 🔍</button>
         </form>
-    <!-- 🌞 Toggle Script -->
+    </div>
     <script>
         function toggleTheme() {
             document.body.classList.toggle("light-mode");
@@ -43,7 +61,23 @@
                 label.textContent = "Dark Mode 🌙";
             }
         }
-    </script>
+        // File input toggling
+        const datasetRadio = document.getElementById("dataset");
+        const randomRadio = document.getElementById("random");
+        const csvRadio = document.getElementById("csv");
+        const pdfRadio = document.getElementById("pdf");
+        const csvInput = document.getElementById("fileInputCsv");
+        const pdfInput = document.getElementById("fileInputPdf");
 
+        function updateFileInputs() {
+            csvInput.style.display = csvRadio.checked ? "block" : "none";
+            pdfInput.style.display = pdfRadio.checked ? "block" : "none";
+        }
+        datasetRadio.addEventListener("change", updateFileInputs);
+        randomRadio.addEventListener("change", updateFileInputs);
+        csvRadio.addEventListener("change", updateFileInputs);
+        pdfRadio.addEventListener("change", updateFileInputs);
+        window.onload = updateFileInputs;
+    </script>
 </body>
 </html>

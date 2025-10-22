@@ -1,21 +1,40 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Prediction Result</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Prediction Result</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
 </head>
 <body>
-  <div class="container">
-    {% if error %}
-      <h2 style="color:red;">❌ {{ error }}</h2>
-      <a href="/">Go Back</a>
-    {% else %}
-      <h2>Model Used: <b>{{ model }}</b></h2>
-      <h3>Predicted RUL: <span style="color:blue;">{{ rul }}</span></h3>
-      <h3>Status: <span class="status-{{ color }}">{{ status }}</span></h3>
-      <a href="/">🔙 New Prediction</a>
-    {% endif %}
-  </div>
+    <div class="toggle-container" onclick="toggleTheme()">
+        <div class="toggle-switch"></div>
+        <span id="theme-label">Dark Mode 🌙</span>
+    </div>
+    <div class="container result-container">
+        {% if result %}
+        <h1 class="result-title">🏷️ Prediction Result</h1>
+        <div class="result-detail">
+            <p><strong>Model Used:</strong> <span class="hl">{{ result.model_used }}</span></p>
+            <p><strong>Input Data Type:</strong> <span class="hl">{{ result.dataset_used }}</span></p>
+            <p><strong>Predicted RUL:</strong> <span class="hl">{{ result.predicted_RUL }}</span></p>
+            <p><strong>Status:</strong> <span class="hl">{{ result.machine_status }}</span></p>
+        </div>
+        <a href="{{ url_for('home') }}" class="styled-link">🔄 Try Another Prediction</a>
+        {% elif error %}
+        <h1 style="color:red;">❌ Error</h1>
+        <p style="color:red;">{{ error }}</p>
+        <a href="{{ url_for('home') }}" class="styled-link">🔄 Go Back</a>
+        {% endif %}
+    </div>
+    <script>
+        function toggleTheme() {
+            document.body.classList.toggle("light-mode");
+            const label = document.getElementById("theme-label");
+            label.textContent = document.body.classList.contains("light-mode")
+                ? "Light Mode ☀️"
+                : "Dark Mode 🌙";
+        }
+    </script>
 </body>
 </html>
