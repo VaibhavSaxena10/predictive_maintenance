@@ -27,16 +27,12 @@ body.light-mode .container {
     background: #fff;
     color: #222;
 }
-h1 {
+h1, .result-title {
     text-align: center;
     color: #4ba3fa;
     font-size: 2rem;
     margin: 0 0 1.5rem 0;
     transition: color 0.5s;
-}
-.result-title {
-    font-size: 2rem;
-    text-align: center;
 }
 label {
     display: block;
@@ -54,6 +50,7 @@ input[type="file"], select, textarea {
     color: #c9d1d9;
     font-size: 1.05rem;
     margin-bottom: 1.2rem;
+    transition: background 0.3s, color 0.3s;
 }
 body.light-mode input[type="file"], body.light-mode select, body.light-mode textarea {
     background: #f5f5f5;
@@ -72,16 +69,18 @@ input[type="radio"] { display: none; }
     padding: 17px 17px 13px 56px;
     border-radius: 9px;
     cursor: pointer;
-    transition: background 0.3s, box-shadow 0.3s;
     background: #20262f;
     display: flex;
     flex-direction: column;
     border: 2px solid transparent;
+    box-shadow: 0 2px 12px -4px #64b5f63e;
+    transition: background 0.3s, box-shadow 0.3s, border 0.3s;
 }
 .input-option:hover, .input-option:focus-within {
     background: #232b3a;
     border: 2px solid #64b5f6;
-    box-shadow: 0 0 8px #64b5f644;
+    box-shadow: 0 0 12px #58a6ffa8;
+    transform: translateY(-2px) scale(1.03);
 }
 body.light-mode .input-option {
     background: #f2f7fc;
@@ -89,7 +88,9 @@ body.light-mode .input-option {
 body.light-mode .input-option:hover, body.light-mode .input-option:focus-within {
     background: #f7fbfe;
     border: 2px solid #73c8ed;
+    box-shadow: 0 0 14px #73c8ed88;
 }
+
 .input-option input[type="radio"]:checked + .radio-custom {
     border: 2px solid #339cff;
     background: #2c6df7;
@@ -134,15 +135,23 @@ body.light-mode .option-desc { color: #2a4b60; }
     font-size: 1.11rem;
     box-shadow: 0 2px 18px -2px #38bb8d33;
     font-weight: 500;
-    transition: background 0.3s, transform 0.2s;
+    transition: background 0.3s, transform 0.22s;
 }
 .styled-btn:hover {
     background: linear-gradient(90deg, #32ca91 0%, #209387 100%);
-    transform: scale(1.02);
+    transform: scale(1.03);
+    box-shadow: 0 4px 32px -6px #32ca9140;
 }
 
 .result-container {
     padding: 32px 34px 34px 34px;
+    border-radius: 16px;
+    box-shadow: 0 0 32px rgba(52,180,255,0.15);
+    transition: box-shadow 0.3s;
+}
+.result-container:hover {
+    box-shadow: 0 0 60px #58a6ff4d;
+    transform: scale(1.01);
 }
 .result-detail {
     margin: 1.7rem 0 1.1rem 0;
@@ -157,19 +166,20 @@ body.light-mode .option-desc { color: #2a4b60; }
 .styled-link {
     display: inline-block;
     margin-top: 15px;
-    padding: 8px 20px;
+    padding: 8px 22px;
     background: #161b22;
     color: #58a6ff;
     border-radius: 6px;
     text-decoration: none;
     font-weight: bold;
     border: 2px solid #222d3a;
-    transition: background 0.3s, color 0.3s, border 0.3s;
+    transition: background 0.32s, color 0.22s, border 0.22s;
 }
 .styled-link:hover {
     background: #58a6ff;
     color: #1a232e;
     border-color: #58a6ff;
+    box-shadow: 0 6px 20px -9px #58a6ff99;
 }
 body.light-mode .styled-link { background: #f5f5f5; color: #236ada; border: 2px solid #bfdaff; }
 body.light-mode .styled-link:hover { background: #236ada; color: #fff; border-color: #236ada; }
@@ -204,3 +214,56 @@ body.light-mode .toggle-switch { background: #238636; }
     transition: transform 0.3s;
 }
 body.light-mode .toggle-switch::before { transform: translateX(20px); }
+
+.status-row {
+    display: flex;
+    justify-content: space-between;
+    margin: 18px 0 20px 0;
+    gap: 10px;
+}
+.data-banner {
+    flex: 1;
+    text-align: center;
+    border-radius: 24px;
+    padding: 7px 0;
+    font-size: 1.01rem;
+    color: #93c9fc;
+    background: #212b3a;
+    border: none;
+    outline: none;
+    margin: 0 3px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 2px 8px #60a6ff22;
+    transition: background 0.3s, color 0.3s, box-shadow 0.2s, transform 0.17s;
+    border: 1.8px solid #191f24;
+}
+.data-banner:hover {
+    background: #64b5f6;
+    color: #111;
+    transform: scale(1.09);
+    box-shadow: 0 4px 22px -5px #64b5f699;
+    border-color: #58a6ff;
+}
+.data-banner.active {
+    background: linear-gradient(90deg, #44c7d7 0%, #3c8dc8 100%);
+    color: #fff;
+    border-color: #34d7d9;
+    box-shadow: 0 4px 26px -7px #2ec7ff99;
+    transform: scale(1.1);
+}
+body.light-mode .data-banner {
+    background: #e7eef8;
+    color: #236ada;
+    border: 1.8px solid #a2c8e7;
+}
+body.light-mode .data-banner:hover {
+    background: #64b5f6;
+    color: #fff;
+    border-color: #64b5f6;
+}
+body.light-mode .data-banner.active {
+    background: linear-gradient(90deg, #bdf7e2 0%, #92c9f3 100%);
+    color: #1c3a6e;
+    border-color: #60c2ec;
+}

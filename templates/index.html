@@ -12,72 +12,90 @@
         <span id="theme-label">Dark Mode 🌙</span>
     </div>
     <div class="container">
-        <h1>🔧 Predictive Maintenance</h1>
+        <h1><span role="img" aria-label="wrench">🔧</span> Predictive Maintenance</h1>
         <form method="POST" enctype="multipart/form-data">
+
             <label for="model_name">Select Model:</label>
-            <select name="model_name" id="model_name" required>
+            <select name="model_name" id="model_name" class="styled-select" required>
                 {% for model in models %}
                 <option value="{{ model }}">{{ model }}</option>
                 {% endfor %}
             </select>
 
-            <label>Select Input Data Option:</label>
-            <div>
-                <input type="radio" id="dataset" name="input_option" value="dataset" checked />
-                <label for="dataset">Use Dataset Sample</label>
-            </div>
-            <div>
-                <input type="radio" id="random" name="input_option" value="random" />
-                <label for="random">Generate Random Sensor Data</label>
-            </div>
-            <div>
-                <input type="radio" id="csv" name="input_option" value="csv" />
-                <label for="csv">Upload CSV File</label>
-            </div>
-            <div>
-                <input type="radio" id="pdf" name="input_option" value="pdf" />
-                <label for="pdf">Upload PDF File</label>
+            <label style="margin-top: 2rem;">Choose your input method:</label>
+            <div class="status-row" id="selected-data-banner">
+                <button type="button" class="data-banner active" id="banner-dataset">Dataset Sample</button>
+                <button type="button" class="data-banner" id="banner-random">Random Data</button>
+                <button type="button" class="data-banner" id="banner-csv">CSV Upload</button>
+                <button type="button" class="data-banner" id="banner-pdf">PDF Upload</button>
             </div>
 
+            <div class="input-options">
+                <label class="input-option">
+                    <input type="radio" name="input_option" value="dataset" id="dataset" checked>
+                    <span class="radio-custom"></span>
+                    <span class="option-title">Dataset Sample</span>
+                    <span class="option-desc">Use a sample from the currently loaded dataset.</span>
+                </label>
+                <label class="input-option">
+                    <input type="radio" name="input_option" value="random" id="random">
+                    <span class="radio-custom"></span>
+                    <span class="option-title">Random Data</span>
+                    <span class="option-desc">Generate random sensor data for a quick test.</span>
+                </label>
+                <label class="input-option">
+                    <input type="radio" name="input_option" value="csv" id="csv">
+                    <span class="radio-custom"></span>
+                    <span class="option-title">CSV Upload</span>
+                    <span class="option-desc">Upload a CSV sensor data file (210 values).</span>
+                </label>
+                <label class="input-option">
+                    <input type="radio" name="input_option" value="pdf" id="pdf">
+                    <span class="radio-custom"></span>
+                    <span class="option-title">PDF Upload</span>
+                    <span class="option-desc">Extract sensor readings from a PDF file.</span>
+                </label>
+            </div>
             <div id="fileInputCsv" style="display:none;">
-                <label for="csv_file">Upload CSV (CSV format, values only):</label>
-                <input type="file" name="csv_file" id="csv_file" accept=".csv" />
+                <label for="csv_file">Upload CSV File:</label>
+                <input type="file" name="csv_file" id="csv_file" accept=".csv">
             </div>
             <div id="fileInputPdf" style="display:none;">
-                <label for="pdf_file">Upload PDF:</label>
-                <input type="file" name="pdf_file" id="pdf_file" accept="application/pdf" />
+                <label for="pdf_file">Upload PDF File:</label>
+                <input type="file" name="pdf_file" id="pdf_file" accept="application/pdf">
             </div>
-
-            <button type="submit">Predict RUL 🔍</button>
+            <button type="submit" class="styled-btn">Predict RUL <span>🔍</span></button>
         </form>
     </div>
     <script>
         function toggleTheme() {
             document.body.classList.toggle("light-mode");
             const label = document.getElementById("theme-label");
-            if (document.body.classList.contains("light-mode")) {
-                label.textContent = "Light Mode ☀️";
-            } else {
-                label.textContent = "Dark Mode 🌙";
-            }
+            label.textContent = document.body.classList.contains("light-mode")
+                ? "Light Mode ☀️"
+                : "Dark Mode 🌙";
         }
-        // File input toggling
-        const datasetRadio = document.getElementById("dataset");
-        const randomRadio = document.getElementById("random");
-        const csvRadio = document.getElementById("csv");
-        const pdfRadio = document.getElementById("pdf");
-        const csvInput = document.getElementById("fileInputCsv");
-        const pdfInput = document.getElementById("fileInputPdf");
-
         function updateFileInputs() {
-            csvInput.style.display = csvRadio.checked ? "block" : "none";
-            pdfInput.style.display = pdfRadio.checked ? "block" : "none";
+            document.getElementById("fileInputCsv").style.display = document.getElementById("csv").checked ? "block" : "none";
+            document.getElementById("fileInputPdf").style.display = document.getElementById("pdf").checked ? "block" : "none";
         }
-        datasetRadio.addEventListener("change", updateFileInputs);
-        randomRadio.addEventListener("change", updateFileInputs);
-        csvRadio.addEventListener("change", updateFileInputs);
-        pdfRadio.addEventListener("change", updateFileInputs);
-        window.onload = updateFileInputs;
+        function updateBanner() {
+            let banners = ["banner-dataset","banner-random","banner-csv","banner-pdf"];
+            let radios = ["dataset","random","csv","pdf"];
+            radios.forEach((id, i) => {
+                document.getElementById(banners[i]).classList.toggle("active", document.getElementById(id).checked);
+            });
+        }
+        for(let id of ["dataset", "random", "csv", "pdf"]) {
+            document.getElementById(id).addEventListener("change", function(){
+                updateFileInputs();
+                updateBanner();
+            });
+        }
+        window.onload = function() {
+            updateFileInputs();
+            updateBanner();
+        }
     </script>
 </body>
 </html>
