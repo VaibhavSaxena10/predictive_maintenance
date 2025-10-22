@@ -8,9 +8,15 @@ from tensorflow.keras.layers import (
     MultiHeadAttention, LayerNormalization, Dense, Dropout,
     Conv1D, GlobalAveragePooling1D
 )
-from PyPDF2 import PdfReader
+# Note: Removed PdfReader as it's no longer used
 
 app = Flask(__name__)
+
+# ----------------------------
+# Configuration
+# ----------------------------
+SEQ_LENGTH = 10
+NUM_FEATURES = 21
 
 # ----------------------------
 # Load and map all models
@@ -29,7 +35,7 @@ def get_all_models(base_dir="saved_models"):
 
 
 MODEL_PATHS = get_all_models()
-MODELS = {}
+MODELS = {} # Model cache
 
 CUSTOM_OBJECTS = {
     "MultiHeadAttention": MultiHeadAttention,
@@ -45,34 +51,17 @@ CUSTOM_OBJECTS = {
 # Helper functions
 # ----------------------------
 def get_health_status(rul_value):
+    """
+    Returns a status message and color for the result.html template.
+    """
     if rul_value > 80:
-        return "Healthy ✅"
+        return {"status": "Healthy ✅", "color": "#238636"} # Green
     elif rul_value > 40:
-        return "Moderate ⚠️"
+        return {"status": "Warning 🟡", "color": "#f1e05a"} # Yellow
     else:
-        return "Critical 🔴"
+        return {"status": "Critical 🔴", "color": "#da3633"} # Red
 
-
-def extract_pdf_data(pdf_file):
-    """Extracts numeric sensor data from a PDF."""
-    reader = PdfReader(pdf_file)
-    text = ""
-    for page in reader.pages:
-        text += page.extract_text() + "\n"
-
-    numbers = []
-    for token in text.replace("\n", " ").split():
-        try:
-            numbers.append(float(token))
-        except ValueError:
-            continue
-
-    if len(numbers) < 21:
-        raise ValueError("Not enough numeric data found in the PDF.")
-
-    arr = np.array(numbers[:21], dtype=np.float32).reshape(1, 1, -1)
-    return arr
-
+# Note: Removed extract_pdf_data function
 
 # ----------------------------
 # ROUTES
@@ -84,32 +73,35 @@ def home():
     if request.method == "POST":
         try:
             model_name = request.form.get("model_name")
-            input_option = request.form.get("input_option")
+            input_text = request.form.get("input_data")
 
-            # ✅ Handle input selection
-            if input_option == "random":
-                input_data = np.random.rand(1, 10, 21).astype(np.float32)
+            if not model_name or model_name not in MODEL_PATHS:
+                raise ValueError("Please select a valid model.")
 
-            elif input_option == "dataset":
-                sample_path = os.path.join("sample_data", "sample_fd001.csv")
-                if os.path.exists(sample_path):
-                    df = pd.read_csv(sample_path)
-                    arr = df.values[:10, :21]
-                    input_data = np.expand_dims(arr, axis=0)
-                else:
-                    raise FileNotFoundError("Sample dataset not found in /sample_data/")
+            if not input_text:
+                raise ValueError("Sensor data cannot be empty.")
 
-            elif input_option == "pdf":
-                pdf_file = request.files.get("pdf_file")
-                if not pdf_file or pdf_file.filename == "":
-                    raise ValueError("No PDF uploaded.")
-                input_data = extract_pdf_data(pdf_file)
+            # --- CORE FIX: Parse and reshape text data ---
+            numbers = []
+            for val in input_text.split(','):
+                if val.strip():
+                    numbers.append(float(val.strip()))
+            
+            expected_numbers = SEQ_LENGTH * NUM_FEATURES
+            if len(numbers) != expected_numbers:
+                raise ValueError(
+                    f"Invalid data shape. Expected {expected_numbers} numbers "
+                    f"(for {SEQ_LENGTH} timesteps x {NUM_FEATURES} features), "
+                    f"but received {len(numbers)}."
+                )
 
-            else:
-                raise ValueError("Invalid input option selected.")
+            # Reshape to (1, 10, 21)
+            input_data = np.array(numbers, dtype=np.float32).reshape(1, SEQ_LENGTH, NUM_FEATURES)
+            # --- End of Core Fix ---
 
-            # ✅ Load model if not cached
+            # Load model if not cached
             if model_name not in MODELS:
+                print(f"Loading model: {model_name}...")
                 MODELS[model_name] = load_model(
                     MODEL_PATHS[model_name],
                     compile=False,
@@ -119,56 +111,28 @@ def home():
             model = MODELS[model_name]
             prediction = model.predict(input_data)
             rul_value = float(prediction.flatten()[0])
+            
+            status_info = get_health_status(rul_value)
 
-            # ✅ Prepare results for display
-            result = {
-                "model_used": model_name,
-                "predicted_RUL": round(rul_value, 2),
-                "machine_status": get_health_status(rul_value)
-            }
-
-            return render_template("result.html", result=result)
+            # ✅ Render the new result.html page with correct variables
+            return render_template(
+                "result.html",
+                model_name=model_name,
+                rul=round(rul_value, 2),
+                status=status_info["status"],
+                color=status_info["color"]
+            )
 
         except Exception as e:
-            error_message = str(e)
-            return render_template("result.html", result={"error": error_message})
+            # ✅ Render result.html with the error
+            return render_template("result.html", error=str(e))
 
+    # GET request: Just show the main page
     return render_template("index.html", models=models)
 
 
-@app.route("/predict", methods=["POST"])
-def predict_api():
-    """API endpoint for JSON requests."""
-    data = request.get_json()
-    if not data or "model_name" not in data or "input" not in data:
-        return jsonify({"error": "Missing 'model_name' or 'input' keys."}), 400
-
-    model_name = data["model_name"]
-    input_data = np.array(data["input"], dtype=np.float32)
-
-    try:
-        if model_name not in MODELS:
-            MODELS[model_name] = load_model(
-                MODEL_PATHS[model_name],
-                compile=False,
-                custom_objects=CUSTOM_OBJECTS
-            )
-
-        model = MODELS[model_name]
-        if len(input_data.shape) == 2:
-            input_data = np.expand_dims(input_data, axis=0)
-
-        prediction = model.predict(input_data)
-        rul_value = float(prediction.flatten()[0])
-
-        return jsonify({
-            "model_used": model_name,
-            "predicted_RUL": round(rul_value, 2),
-            "machine_status": get_health_status(rul_value)
-        })
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+# --- FIX ---
+# Removed the entire /predict API route as it's not used by the form.
 
 
 if __name__ == "__main__":

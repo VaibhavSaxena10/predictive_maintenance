@@ -3,14 +3,7 @@ import numpy as np
 import tensorflow as tf
 import pandas as pd
 import matplotlib.pyplot as plt
-from tcn import TCN
-from keras.saving import register_keras_serializable
-
-# ✅ Register TCN class for deserialization
-@register_keras_serializable(package="Custom")
-class RegisteredTCN(TCN):
-    pass
-
+# --- FIX: Removed TCN imports ---
 
 # ---------------------------
 # Configuration
@@ -20,7 +13,8 @@ RESULTS_DIR = "results"
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
 DATASETS = ["FD001", "FD002", "FD003", "FD004"]
-MODEL_TYPES = ["lstm", "gru", "tcn", "transformer"]
+# --- FIX: Removed "tcn" ---
+MODEL_TYPES = ["lstm", "gru", "transformer"]
 
 SEQ_LEN = 10
 NUM_FEATURES = 21
@@ -35,7 +29,7 @@ def safe_load_model(path):
             path,
             compile=False,
             custom_objects={
-                "TCN": RegisteredTCN,
+                # --- FIX: Removed "TCN" ---
                 "MultiHeadAttention": tf.keras.layers.MultiHeadAttention,
                 "LayerNormalization": tf.keras.layers.LayerNormalization,
                 "Conv1D": tf.keras.layers.Conv1D,
@@ -119,7 +113,11 @@ csv_path = os.path.join(RESULTS_DIR, "all_models_test_summary.csv")
 df.to_csv(csv_path, index=False)
 
 print("\n📊 Summary of All Model Predictions:\n")
-print(df[["Dataset", "Model", "Predicted_RUL", "Health_Status"]].dropna())
+# Handle case where Predicted_RUL might not exist if all models fail
+if "Predicted_RUL" in df.columns:
+    print(df[["Dataset", "Model", "Predicted_RUL", "Health_Status"]].dropna())
+else:
+    print("No valid predictions were made.")
 
 # ---------------------------
 # Identify best model
@@ -137,18 +135,19 @@ else:
 # ---------------------------
 # Save bar chart
 # ---------------------------
+chart_path = os.path.join(RESULTS_DIR, "model_rul_comparison.png")
 plt.figure(figsize=(10, 6))
-valid_models = df[df["Predicted_RUL"].notna()]
-if not valid_models.empty:
-    plt.bar(valid_models["Dataset"] + " - " + valid_models["Model"], valid_models["Predicted_RUL"])
+if valid_results is not None and not valid_results.empty:
+    plt.bar(valid_results["Dataset"] + " - " + valid_results["Model"], valid_results["Predicted_RUL"])
     plt.xticks(rotation=45, ha="right")
     plt.xlabel("Model")
     plt.ylabel("Predicted RUL")
     plt.title("Model RUL Comparison")
     plt.tight_layout()
-    chart_path = os.path.join(RESULTS_DIR, "model_rul_comparison.png")
     plt.savefig(chart_path)
     plt.close()
+    print(f"📈 Saved bar chart to {chart_path}")
+else:
+    print("⚠️ Bar chart not saved as no valid predictions were found.")
 
 print(f"✅ Saved summary to {csv_path}")
-print(f"📈 Saved bar chart to {chart_path}")

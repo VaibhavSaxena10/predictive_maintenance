@@ -32,18 +32,6 @@
 
             <button type="submit">Predict RUL 🔍</button>
         </form>
-
-        <!-- 🧾 Result Section -->
-        {% if result %}
-        <div class="result-card">
-            <h2>📊 Prediction Result</h2>
-            <p><strong>Model Used:</strong> {{ result.model_used }}</p>
-            <p><strong>Predicted RUL:</strong> {{ result.predicted_RUL }}</p>
-            <p><strong>Status:</strong> {{ result.machine_status }}</p>
-        </div>
-        {% endif %}
-    </div>
-
     <!-- 🌞 Toggle Script -->
     <script>
         function toggleTheme() {
