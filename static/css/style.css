@@ -19,9 +19,9 @@ body.light-mode {
     border-radius: 15px;
     min-width: 375px;
     max-width: 430px;
-    box-shadow: 0 0 32px rgba(0,0,0,0.3);
+    box-shadow: 0 0 32px rgba(52,180,255,0.15);
     margin: 42px auto;
-    transition: background 0.5s, color 0.5s;
+    transition: background 0.5s, box-shadow 0.3s,color 0.5s;
 }
 body.light-mode .container {
     background: #fff;
@@ -266,4 +266,121 @@ body.light-mode .data-banner.active {
     background: linear-gradient(90deg, #bdf7e2 0%, #92c9f3 100%);
     color: #1c3a6e;
     border-color: #60c2ec;
+}
+body, html {
+    min-height: 100vh;
+    min-width: 100vw;
+    margin: 0;
+    padding: 0;
+}
+.main-bg {
+    min-height: 100vh;
+    min-width: 100vw;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: inherit;
+    transition: background 0.45s;
+}
+body { background: #181f2c; }
+body.light-mode { background: #edf3fa; }
+.dashboard-title {
+    font-size: 1.4rem;
+    text-align: center;
+    color: #4ba3fa;
+    font-weight: 800;
+    margin-bottom: 22px;
+}
+.form-row, .form-row-horizontal {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 17px;
+}
+.form-label {
+    font-size: 1.03rem;
+    font-weight: 700;
+    color: #52e3e7;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+}
+.form-icon {
+    margin-right: 8px;
+    color: #51cbea;
+    font-size: 1.13em;
+}
+.toggle-pills {
+    display: flex;
+    gap: 13px;
+    margin-top: 4px;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+.pill {
+    flex: 1 1 115px;   /* Minimum width, equal growth */
+    max-width: 150px;  /* Optional: prevent overly wide pills on large screens */
+    text-align: center;
+    justify-content: center;
+    padding: 9px 0;
+    border-radius: 21px;
+    background: #22304a;
+    color: #98d4ff;
+    font-size: 1.05rem;
+    font-weight: 700;
+    border: none;
+    transition: background 0.19s, color 0.19s, transform 0.12s, box-shadow 0.2s;
+    cursor: pointer;
+    box-shadow: 0 1px 10px #55aaff11;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 115px;
+    margin-bottom: 5px;
+}
+@media (max-width: 600px) {
+    .pill {
+        flex: 1 1 98px;
+        min-width: 90px;
+        font-size: 0.99rem;
+    }
+}
+
+.toggle-pills input[type="radio"]:checked + .pill,
+.pill:hover {
+    background: linear-gradient(90deg, #51cbea 0%, #52edba 100%);
+    color: #181f2c;
+    transform: scale(1.07);
+    box-shadow: 0 0 14px #51cbea33;
+}
+.pill-anim:active { animation: pillClick 0.17s; }
+@keyframes pillClick { 0%{transform:scale(1.12);} 100%{transform:scale(1.07);} }
+.hidden-input {
+    width: 100%;
+    margin-top: 17px;
+    margin-bottom: 0;
+    display: none;
+}
+.hidden-input label {
+    display: block;
+    font-size: 1.025rem;
+    font-weight: 600;
+    color: #50c3fa;
+    margin-bottom: 7px;
+    padding-left: 1px;
+    display:flex; align-items: center; gap: 8px;
+}
+.hidden-input input[type="file"] {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 10px;
+    border-radius: 7px;
+    border: none;
+    background: #22262e;
+    color: #c9d1d9;
+    font-size: 1.04rem;
+}
+.container:hover {
+    box-shadow: 0 0 60px #58a6ff4d;
+    transform: scale(1.01);
 }
