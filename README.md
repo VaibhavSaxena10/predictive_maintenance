@@ -116,5 +116,3 @@ Mentorship: Ms. Rashika Bangroo
 Data: NASA Armstrong Flight Research Center, C-MAPSS
 
 Frontend: Custom Flask/CSS design with contributions from open source UI/UX patterns
-
-For questions or feedback, please open an issue or contact [your.email@example.com].
