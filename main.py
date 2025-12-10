@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.cluster import KMeans   ### CHANGED: for regime detection [web:24][web:36]
 import tensorflow as tf
 from tensorflow.keras.models import Sequential, load_model, Model
 from tensorflow.keras.layers import (Input, Dense, Dropout, LSTM, GRU,
@@ -15,11 +16,25 @@ from tensorflow.keras.callbacks import EarlyStopping, Callback, ReduceLROnPlatea
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.regularizers import l2
 
-SEQ_LENGTH = 10
+
+# =================== CONFIG ===================
+
+SEQ_LENGTH = 30          ### CHANGED: longer window for more context [web:24]
 BATCH_SIZE = 32
 EPOCHS = 40
 RANDOM_STATE = 42
 DATASETS = ["FD001", "FD002", "FD003", "FD004"]
+
+# advanced preprocessing config
+MAX_RUL = 125            ### CHANGED: RUL capping [web:24]
+WINDOW_STEP = 1          ### CHANGED: step between windows
+### CHANGED: fix sensor list to match 21-sensor C-MAPSS format
+IMPORTANT_SENSORS = [2, 3, 4, 7, 8, 9, 11, 12, 13, 14, 15, 17, 20, 21]
+SELECTED_SENSOR_COLS = [f"sensor_{i}" for i in IMPORTANT_SENSORS]         ### CHANGED
+
+USE_REGIME_SCALING = True    ### CHANGED: regime-wise normalization for FD002/FD004 [web:24][web:36]
+USE_SMOOTHING = False        ### CHANGED: optional moving-average smoothing
+SMOOTHING_WINDOW = 3         ### CHANGED
 
 MODEL_DIR = "saved_models"
 RESULTS_DIR = "results"
@@ -27,33 +42,102 @@ os.makedirs(MODEL_DIR, exist_ok=True)
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
 
-def load_cmapss_train(file_path):
-    cols = ['engine_id', 'cycle', 'op_setting_1', 'op_setting_2', 'op_setting_3'] + [f'sensor_{i}' for i in range(1, 22)]
+# =================== ADVANCED PREPROCESSING ===================
+
+### CHANGED: new loader with RUL capping [web:24]
+def load_cmapss_train_adv(file_path, max_rul=MAX_RUL):
+    cols = ['engine_id', 'cycle', 'op_setting_1', 'op_setting_2', 'op_setting_3'] + \
+           [f'sensor_{i}' for i in range(1, 22)]
     df = pd.read_csv(file_path, sep=' ', header=None)
     df.dropna(axis=1, how='all', inplace=True)
     df.columns = cols
+
     max_cycle = df.groupby('engine_id')['cycle'].max().reset_index()
     max_cycle.columns = ['engine_id', 'max_cycle']
     df = df.merge(max_cycle, on='engine_id', how='left')
     df['RUL'] = df['max_cycle'] - df['cycle']
+
+    if max_rul is not None:
+        df['RUL'] = df['RUL'].clip(upper=max_rul)
+
     df.drop('max_cycle', axis=1, inplace=True)
     return df
 
 
-def make_sequences(df, seq_length=SEQ_LENGTH):
-    sensor_cols = [f'sensor_{i}' for i in range(1, 22)]
+### CHANGED: optional smoothing [web:32][web:35]
+def smooth_sensors(df, sensor_cols, window=SMOOTHING_WINDOW):
+    for col in sensor_cols:
+        df[col] = df.groupby('engine_id')[col].transform(
+            lambda x: x.rolling(window, min_periods=1).mean()
+        )
+    return df
+
+
+### CHANGED: KMeans regime detection [web:24][web:36]
+def add_regime_id_kmeans(df, n_clusters=6, random_state=RANDOM_STATE):
+    ops = df[['op_setting_1', 'op_setting_2', 'op_setting_3']].values
+    km = KMeans(n_clusters=n_clusters, random_state=random_state)
+    df['regime'] = km.fit_predict(ops)
+    return df
+
+
+### CHANGED: basic sequences (single scaler) – for FD001 & FD003 [web:24]
+def make_sequences_basic(df,
+                         seq_length=SEQ_LENGTH,
+                         step=WINDOW_STEP,
+                         sensor_cols=None):
+    if sensor_cols is None:
+        sensor_cols = [f'sensor_{i}' for i in range(1, 22)]
+
+    if USE_SMOOTHING:
+        df = smooth_sensors(df, sensor_cols, window=SMOOTHING_WINDOW)
+
     scaler = MinMaxScaler()
     df[sensor_cols] = scaler.fit_transform(df[sensor_cols])
+
     X, y = [], []
     for uid in df['engine_id'].unique():
-        sub = df[df['engine_id'] == uid]
+        sub = df[df['engine_id'] == uid].sort_values('cycle')
         sensors = sub[sensor_cols].values
         rul = sub['RUL'].values
-        for i in range(len(sub) - seq_length + 1):
+        for i in range(0, len(sub) - seq_length + 1, step):
             X.append(sensors[i:i + seq_length])
             y.append(rul[i + seq_length - 1])
+
     return np.array(X, dtype='float32'), np.array(y, dtype='float32'), scaler
 
+
+### CHANGED: regime-aware sequences – for FD002 & FD004 [web:24][web:36]
+def make_sequences_regime(df,
+                          seq_length=SEQ_LENGTH,
+                          step=WINDOW_STEP,
+                          sensor_cols=None):
+    if sensor_cols is None:
+        sensor_cols = [f'sensor_{i}' for i in range(1, 22)]
+
+    if USE_SMOOTHING:
+        df = smooth_sensors(df, sensor_cols, window=SMOOTHING_WINDOW)
+
+    scalers = {}
+    for r in df['regime'].unique():
+        mask = df['regime'] == r
+        scaler = MinMaxScaler()
+        df.loc[mask, sensor_cols] = scaler.fit_transform(df.loc[mask, sensor_cols])
+        scalers[r] = scaler
+
+    X, y = [], []
+    for uid in df['engine_id'].unique():
+        sub = df[df['engine_id'] == uid].sort_values('cycle')
+        sensors = sub[sensor_cols].values
+        rul = sub['RUL'].values
+        for i in range(0, len(sub) - seq_length + 1, step):
+            X.append(sensors[i:i + seq_length])
+            y.append(rul[i + seq_length - 1])
+
+    return np.array(X, dtype='float32'), np.array(y, dtype='float32'), scalers
+
+
+# =================== UTILS & MODELS (UNCHANGED) ===================
 
 def save_plot(y_true, preds_dict, out_path, max_points=200):
     plt.figure(figsize=(10, 5))
@@ -115,6 +199,52 @@ def plot_training_curves_from_csv(csv_file, model_name, dataset_name, out_dir):
     plt.close()
     print(f"📊 Saved training curve from CSV for {model_name} → {out_path}")
 
+### CHANGED: improved RUL comparison plot with per-model colors and proper naming
+def plot_model_rul_comparison(all_preds_dict, out_path):
+    """
+    all_preds_dict: dict like {
+        'FD001': {'LSTM': y_pred_array, 'GRU': y_pred_array, 'TRF': y_pred_array},
+        'FD002': {...},
+        ...
+    }
+    Plots average predicted RUL for each model per dataset with color differentiation.
+    """
+    datasets = sorted(all_preds_dict.keys())
+    model_names = ['LSTM', 'GRU', 'TRF']
+    
+    # Prepare data
+    data_for_plot = {model: [] for model in model_names}
+    
+    for ds in datasets:
+        for model in model_names:
+            if model in all_preds_dict[ds]:
+                preds = all_preds_dict[ds][model]
+                avg_rul = np.mean(preds)
+                data_for_plot[model].append(avg_rul)
+            else:
+                data_for_plot[model].append(0)  # fallback if model missing
+    
+    # Create bar plot with colors per model
+    x = np.arange(len(datasets))
+    width = 0.25
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c']  # blue, orange, green
+    
+    plt.figure(figsize=(12, 6))
+    for i, model in enumerate(model_names):
+        plt.bar(x + i * width, data_for_plot[model], width, label=model, color=colors[i])
+    
+    plt.xlabel('Dataset', fontsize=12, fontweight='bold')
+    plt.ylabel('Average Predicted RUL', fontsize=12, fontweight='bold')
+    plt.title('Model RUL Comparison Across Datasets', fontsize=14, fontweight='bold')
+    plt.xticks(x + width, datasets, fontsize=11)
+    plt.legend(fontsize=11)
+    plt.grid(axis='y', alpha=0.3, linestyle='--')
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=200, bbox_inches='tight')
+    plt.close()
+    print(f"📊 Saved Model RUL Comparison → {out_path}")
+
+
 
 class LiveAccuracyTrackerCSV(Callback):
     """Prints live metrics and saves per-epoch metrics to CSV."""
@@ -138,13 +268,12 @@ class LiveAccuracyTrackerCSV(Callback):
         pd.DataFrame(self.logs_list).to_csv(self.out_file, index=False)
 
 
-# Improved LSTM with Bidirectional Layers
 def build_lstm(input_shape):
     model = Sequential([
         Bidirectional(LSTM(128, return_sequences=True,
                            activation='tanh', recurrent_activation='sigmoid',
                            kernel_regularizer=l2(0.01), recurrent_regularizer=l2(0.01)),
-                      input_shape=input_shape),
+                     input_shape=input_shape),
         BatchNormalization(),
         Dropout(0.3),
 
@@ -162,14 +291,13 @@ def build_lstm(input_shape):
     return model
 
 
-# Improved GRU with Bidirectional Layers
 def build_gru(input_shape):
     model = Sequential([
         Bidirectional(GRU(128, return_sequences=True,
                           activation='tanh', recurrent_activation='sigmoid',
                           kernel_regularizer=l2(0.01), recurrent_regularizer=l2(0.01),
                           reset_after=True),
-                      input_shape=input_shape),
+                     input_shape=input_shape),
         BatchNormalization(),
         Dropout(0.3),
 
@@ -188,7 +316,6 @@ def build_gru(input_shape):
     return model
 
 
-# Improved positional encoding
 def positional_encoding(seq_len, d_model):
     pos = np.arange(seq_len)[:, np.newaxis]
     i = np.arange(d_model)[np.newaxis, :]
@@ -200,7 +327,6 @@ def positional_encoding(seq_len, d_model):
     return tf.cast(pe[np.newaxis, :], dtype=tf.float32)
 
 
-# Improved Transformer with 2 Transformer blocks
 def build_transformer(input_shape, d_model=64, num_heads=4, ff_dim=256):
     seq_len, n_features = input_shape
     inputs = Input(shape=input_shape)
@@ -260,7 +386,7 @@ def plot_summary(results_df, out_path):
     for i, model in enumerate(models):
         vals = results_df[results_df['Model'] == model]['RMSE']
         plt.bar(x + i * width, vals, width=width, label=model)
-    plt.xticks(x + width * (len(models) - 1) / 2, datasets)
+        plt.xticks(x + width * (len(models) - 1) / 2, datasets)
     plt.xlabel('Dataset')
     plt.ylabel('RMSE')
     plt.title('RMSE Comparison')
@@ -272,9 +398,11 @@ def plot_summary(results_df, out_path):
     print(f"📊 Saved final summary plot → {out_path}")
 
 
-all_results = []
-lr_scheduler = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=3, verbose=1)
+# =================== MAIN TRAINING LOOP ===================
 
+all_results = []
+all_preds_dict = {}
+lr_scheduler = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=3, verbose=1)
 
 for ds in DATASETS:
     print(f"\n🚀 Processing Dataset: {ds}")
@@ -283,9 +411,30 @@ for ds in DATASETS:
         print(f"❌ {file_path} not found. Skipping.")
         continue
 
-    df = load_cmapss_train(file_path)
-    X, y, _ = make_sequences(df, seq_length=SEQ_LENGTH)
-    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=RANDOM_STATE)
+    ### CHANGED: advanced loader + branching for regimes
+    df = load_cmapss_train_adv(file_path, max_rul=MAX_RUL)
+
+    sensor_cols = SELECTED_SENSOR_COLS   # 14 selected sensors
+
+    if USE_REGIME_SCALING and ds in ["FD002", "FD004"]:
+        df = add_regime_id_kmeans(df, n_clusters=6, random_state=RANDOM_STATE)
+        X, y, _ = make_sequences_regime(
+            df,
+            seq_length=SEQ_LENGTH,
+            step=WINDOW_STEP,
+            sensor_cols=sensor_cols
+        )
+    else:
+        X, y, _ = make_sequences_basic(
+            df,
+            seq_length=SEQ_LENGTH,
+            step=WINDOW_STEP,
+            sensor_cols=sensor_cols
+        )
+
+    X_train, X_val, y_train, y_val = train_test_split(
+        X, y, test_size=0.2, random_state=RANDOM_STATE
+    )
 
     ds_model_dir = os.path.join(MODEL_DIR, ds)
     ds_result_dir = os.path.join(RESULTS_DIR, ds)
@@ -309,9 +458,12 @@ for ds in DATASETS:
                 plot_training_curves_from_csv(csv_file, name, ds, ds_result_dir)
         else:
             print(f"🧠 Building new {name} model for {ds}")
-            if name == 'LSTM': models[name] = build_lstm((X.shape[1], X.shape[2]))
-            elif name == 'GRU': models[name] = build_gru((X.shape[1], X.shape[2]))
-            else: models[name] = build_transformer((X.shape[1], X.shape[2]))
+            if name == 'LSTM':
+                models[name] = build_lstm((X.shape[1], X.shape[2]))
+            elif name == 'GRU':
+                models[name] = build_gru((X.shape[1], X.shape[2]))
+            else:
+                models[name] = build_transformer((X.shape[1], X.shape[2]))
 
     for name, model in models.items():
         if not os.path.exists(paths[name]):
@@ -340,6 +492,7 @@ for ds in DATASETS:
         r2 = r2_score(y_val, y_pred)
         all_results.append([ds, name, mae, rmse, r2])
         print(f"📈 {name} Results → MAE: {mae:.3f} | RMSE: {rmse:.3f} | R²: {r2:.3f}")
+    all_preds_dict[ds] = preds
 
     plot_path = os.path.join(ds_result_dir, f"rul_comparison_{ds}.png")
     save_plot(y_val, preds, plot_path)
@@ -352,3 +505,6 @@ print(f"\n✅ All done! Consolidated results saved → {csv_out}")
 
 summary_plot_path = os.path.join(RESULTS_DIR, "summary_mae_rmse_comparison.png")
 plot_summary(results_df, summary_plot_path)
+
+rul_comp_path = os.path.join(RESULTS_DIR, "model_rul_comparison.png")
+plot_model_rul_comparison(all_preds_dict, rul_comp_path)
