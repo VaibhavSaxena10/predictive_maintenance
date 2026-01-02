@@ -32,7 +32,7 @@ WINDOW_STEP = 1          ### CHANGED: step between windows
 IMPORTANT_SENSORS = [2, 3, 4, 7, 8, 9, 11, 12, 13, 14, 15, 17, 20, 21]
 SELECTED_SENSOR_COLS = [f"sensor_{i}" for i in IMPORTANT_SENSORS]         ### CHANGED
 
-USE_REGIME_SCALING = True    ### CHANGED: regime-wise normalization for FD002/FD004 [web:24][web:36]
+USE_REGIME_SCALING = True    ### CHANGED: regime-wise normalization for FD002/FD004 
 USE_SMOOTHING = False        ### CHANGED: optional moving-average smoothing
 SMOOTHING_WINDOW = 3         ### CHANGED
 
