@@ -11,7 +11,7 @@ Mentor: Ms. Rashika Bangroo
 Status: ~100% complete
 
 🚀 Key Features
-Multi-Model Deep Learning: Choose and compare LSTM, GRU, TCN, and Transformer architectures for RUL prediction.
+Multi-Model Deep Learning: Choose and compare LSTM, GRU, and Transformer architectures for RUL prediction.
 
 Modular Pipeline: Trains and benchmarks on all NASA FD001–FD004 datasets. Models auto-save/load for live prediction.
 
