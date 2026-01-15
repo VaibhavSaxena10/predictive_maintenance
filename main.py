@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from sklearn.cluster import KMeans   ### CHANGED: for regime detection [web:24][web:36]
+from sklearn.cluster import KMeans   ### CHANGED: for regime detection
 import tensorflow as tf
 from tensorflow.keras.models import Sequential, load_model, Model
 from tensorflow.keras.layers import (Input, Dense, Dropout, LSTM, GRU,
@@ -19,20 +19,20 @@ from tensorflow.keras.regularizers import l2
 
 # =================== CONFIG ===================
 
-SEQ_LENGTH = 30          ### CHANGED: longer window for more context [web:24]
+SEQ_LENGTH = 30          ### CHANGED: longer window for more context
 BATCH_SIZE = 32
 EPOCHS = 40
 RANDOM_STATE = 42
 DATASETS = ["FD001", "FD002", "FD003", "FD004"]
 
 # advanced preprocessing config
-MAX_RUL = 125            ### CHANGED: RUL capping [web:24]
+MAX_RUL = 125            ### CHANGED: RUL capping
 WINDOW_STEP = 1          ### CHANGED: step between windows
 ### CHANGED: fix sensor list to match 21-sensor C-MAPSS format
 IMPORTANT_SENSORS = [2, 3, 4, 7, 8, 9, 11, 12, 13, 14, 15, 17, 20, 21]
-SELECTED_SENSOR_COLS = [f"sensor_{i}" for i in IMPORTANT_SENSORS]         ### CHANGED
+SELECTED_SENSOR_COLS = [f"sensor_{i}" for i in IMPORTANT_SENSORS]  ### CHANGED
 
-USE_REGIME_SCALING = True    ### CHANGED: regime-wise normalization for FD002/FD004 
+USE_REGIME_SCALING = True    ### CHANGED: regime-wise normalization for FD002/FD004
 USE_SMOOTHING = False        ### CHANGED: optional moving-average smoothing
 SMOOTHING_WINDOW = 3         ### CHANGED
 
@@ -44,7 +44,7 @@ os.makedirs(RESULTS_DIR, exist_ok=True)
 
 # =================== ADVANCED PREPROCESSING ===================
 
-### CHANGED: new loader with RUL capping [web:24]
+### CHANGED: new loader with RUL capping
 def load_cmapss_train_adv(file_path, max_rul=MAX_RUL):
     cols = ['engine_id', 'cycle', 'op_setting_1', 'op_setting_2', 'op_setting_3'] + \
            [f'sensor_{i}' for i in range(1, 22)]
@@ -64,7 +64,7 @@ def load_cmapss_train_adv(file_path, max_rul=MAX_RUL):
     return df
 
 
-### CHANGED: optional smoothing [web:32][web:35]
+### CHANGED: optional smoothing
 def smooth_sensors(df, sensor_cols, window=SMOOTHING_WINDOW):
     for col in sensor_cols:
         df[col] = df.groupby('engine_id')[col].transform(
@@ -73,7 +73,7 @@ def smooth_sensors(df, sensor_cols, window=SMOOTHING_WINDOW):
     return df
 
 
-### CHANGED: KMeans regime detection [web:24][web:36]
+### CHANGED: KMeans regime detection
 def add_regime_id_kmeans(df, n_clusters=6, random_state=RANDOM_STATE):
     ops = df[['op_setting_1', 'op_setting_2', 'op_setting_3']].values
     km = KMeans(n_clusters=n_clusters, random_state=random_state)
@@ -81,7 +81,7 @@ def add_regime_id_kmeans(df, n_clusters=6, random_state=RANDOM_STATE):
     return df
 
 
-### CHANGED: basic sequences (single scaler) – for FD001 & FD003 [web:24]
+### CHANGED: basic sequences (single scaler) – for FD001 & FD003
 def make_sequences_basic(df,
                          seq_length=SEQ_LENGTH,
                          step=WINDOW_STEP,
@@ -107,7 +107,7 @@ def make_sequences_basic(df,
     return np.array(X, dtype='float32'), np.array(y, dtype='float32'), scaler
 
 
-### CHANGED: regime-aware sequences – for FD002 & FD004 [web:24][web:36]
+### CHANGED: regime-aware sequences – for FD002 & FD004
 def make_sequences_regime(df,
                           seq_length=SEQ_LENGTH,
                           step=WINDOW_STEP,
@@ -137,7 +137,7 @@ def make_sequences_regime(df,
     return np.array(X, dtype='float32'), np.array(y, dtype='float32'), scalers
 
 
-# =================== UTILS & MODELS (UNCHANGED) ===================
+# =================== UTILS & MODELS (UNCHANGED COLORS) ===================
 
 def save_plot(y_true, preds_dict, out_path, max_points=200):
     plt.figure(figsize=(10, 5))
@@ -199,22 +199,19 @@ def plot_training_curves_from_csv(csv_file, model_name, dataset_name, out_dir):
     plt.close()
     print(f"📊 Saved training curve from CSV for {model_name} → {out_path}")
 
-### CHANGED: improved RUL comparison plot with per-model colors and proper naming
+
+# =================== COLOR-CHANGED PLOTS ONLY ===================
+
 def plot_model_rul_comparison(all_preds_dict, out_path):
     """
-    all_preds_dict: dict like {
-        'FD001': {'LSTM': y_pred_array, 'GRU': y_pred_array, 'TRF': y_pred_array},
-        'FD002': {...},
-        ...
-    }
     Plots average predicted RUL for each model per dataset with color differentiation.
     """
     datasets = sorted(all_preds_dict.keys())
     model_names = ['LSTM', 'GRU', 'TRF']
-    
+
     # Prepare data
     data_for_plot = {model: [] for model in model_names}
-    
+
     for ds in datasets:
         for model in model_names:
             if model in all_preds_dict[ds]:
@@ -223,16 +220,19 @@ def plot_model_rul_comparison(all_preds_dict, out_path):
                 data_for_plot[model].append(avg_rul)
             else:
                 data_for_plot[model].append(0)  # fallback if model missing
-    
-    # Create bar plot with colors per model
+
     x = np.arange(len(datasets))
     width = 0.25
-    colors = ['#1f77b4', '#ff7f0e', '#2ca02c']  # blue, orange, green
-    
+    colors = ["#a50b0b", "#ffd900", "#190aea"]  # Red, Yellow, Blue
+
     plt.figure(figsize=(12, 6))
     for i, model in enumerate(model_names):
-        plt.bar(x + i * width, data_for_plot[model], width, label=model, color=colors[i])
-    
+        plt.bar(x + i * width,
+                data_for_plot[model],
+                width,
+                label=model,
+                color=colors[i])
+
     plt.xlabel('Dataset', fontsize=12, fontweight='bold')
     plt.ylabel('Average Predicted RUL', fontsize=12, fontweight='bold')
     plt.title('Model RUL Comparison Across Datasets', fontsize=14, fontweight='bold')
@@ -245,6 +245,53 @@ def plot_model_rul_comparison(all_preds_dict, out_path):
     print(f"📊 Saved Model RUL Comparison → {out_path}")
 
 
+def plot_summary(results_df, out_path):
+    datasets = results_df['Dataset'].unique()
+    models = results_df['Model'].unique()
+    width = 0.2
+    x = np.arange(len(datasets))
+
+    colors = ["#a50b0b", "#ffd900", "#190aea"]  # Red, Yellow, Blue
+
+    plt.figure(figsize=(12, 5))
+
+    # MAE
+    plt.subplot(1, 2, 1)
+    for i, model in enumerate(models):
+        vals = results_df[results_df['Model'] == model]['MAE']
+        plt.bar(x + i * width,
+                vals,
+                width=width,
+                label=model,
+                color=colors[i % len(colors)])
+    plt.xticks(x + width * (len(models) - 1) / 2, datasets)
+    plt.xlabel('Dataset')
+    plt.ylabel('MAE')
+    plt.title('MAE Comparison')
+    plt.legend()
+
+    # RMSE
+    plt.subplot(1, 2, 2)
+    for i, model in enumerate(models):
+        vals = results_df[results_df['Model'] == model]['RMSE']
+        plt.bar(x + i * width,
+                vals,
+                width=width,
+                label=model,
+                color=colors[i % len(colors)])
+        plt.xticks(x + width * (len(models) - 1) / 2, datasets)
+    plt.xlabel('Dataset')
+    plt.ylabel('RMSE')
+    plt.title('RMSE Comparison')
+    plt.legend()
+
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=200)
+    plt.close()
+    print(f"📊 Saved final summary plot → {out_path}")
+
+
+# =================== MODELS ===================
 
 class LiveAccuracyTrackerCSV(Callback):
     """Prints live metrics and saves per-epoch metrics to CSV."""
@@ -364,40 +411,6 @@ def build_transformer(input_shape, d_model=64, num_heads=4, ff_dim=256):
     return model
 
 
-def plot_summary(results_df, out_path):
-    datasets = results_df['Dataset'].unique()
-    models = results_df['Model'].unique()
-    width = 0.2
-    x = np.arange(len(datasets))
-
-    plt.figure(figsize=(12, 5))
-
-    plt.subplot(1, 2, 1)
-    for i, model in enumerate(models):
-        vals = results_df[results_df['Model'] == model]['MAE']
-        plt.bar(x + i * width, vals, width=width, label=model)
-    plt.xticks(x + width * (len(models) - 1) / 2, datasets)
-    plt.xlabel('Dataset')
-    plt.ylabel('MAE')
-    plt.title('MAE Comparison')
-    plt.legend()
-
-    plt.subplot(1, 2, 2)
-    for i, model in enumerate(models):
-        vals = results_df[results_df['Model'] == model]['RMSE']
-        plt.bar(x + i * width, vals, width=width, label=model)
-        plt.xticks(x + width * (len(models) - 1) / 2, datasets)
-    plt.xlabel('Dataset')
-    plt.ylabel('RMSE')
-    plt.title('RMSE Comparison')
-    plt.legend()
-
-    plt.tight_layout()
-    plt.savefig(out_path, dpi=200)
-    plt.close()
-    print(f"📊 Saved final summary plot → {out_path}")
-
-
 # =================== MAIN TRAINING LOOP ===================
 
 all_results = []
@@ -411,7 +424,6 @@ for ds in DATASETS:
         print(f"❌ {file_path} not found. Skipping.")
         continue
 
-    ### CHANGED: advanced loader + branching for regimes
     df = load_cmapss_train_adv(file_path, max_rul=MAX_RUL)
 
     sensor_cols = SELECTED_SENSOR_COLS   # 14 selected sensors
