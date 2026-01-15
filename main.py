@@ -137,7 +137,7 @@ def make_sequences_regime(df,
     return np.array(X, dtype='float32'), np.array(y, dtype='float32'), scalers
 
 
-# =================== UTILS & MODELS (UNCHANGED COLORS) ===================
+# =================== UTILS & MODELS (unchanged plots for curves) ===================
 
 def save_plot(y_true, preds_dict, out_path, max_points=200):
     plt.figure(figsize=(10, 5))
@@ -200,7 +200,7 @@ def plot_training_curves_from_csv(csv_file, model_name, dataset_name, out_dir):
     print(f"📊 Saved training curve from CSV for {model_name} → {out_path}")
 
 
-# =================== COLOR-CHANGED PLOTS ONLY ===================
+# =================== COLOR-CHANGED PLOTS ===================
 
 def plot_model_rul_comparison(all_preds_dict, out_path):
     """
@@ -246,6 +246,9 @@ def plot_model_rul_comparison(all_preds_dict, out_path):
 
 
 def plot_summary(results_df, out_path):
+    """
+    Summary bar charts for MAE, RMSE, and R² across datasets and models.
+    """
     datasets = results_df['Dataset'].unique()
     models = results_df['Model'].unique()
     width = 0.2
@@ -253,10 +256,10 @@ def plot_summary(results_df, out_path):
 
     colors = ["#a50b0b", "#ffd900", "#190aea"]  # Red, Yellow, Blue
 
-    plt.figure(figsize=(12, 5))
+    plt.figure(figsize=(18, 5))
 
     # MAE
-    plt.subplot(1, 2, 1)
+    plt.subplot(1, 3, 1)
     for i, model in enumerate(models):
         vals = results_df[results_df['Model'] == model]['MAE']
         plt.bar(x + i * width,
@@ -271,7 +274,7 @@ def plot_summary(results_df, out_path):
     plt.legend()
 
     # RMSE
-    plt.subplot(1, 2, 2)
+    plt.subplot(1, 3, 2)
     for i, model in enumerate(models):
         vals = results_df[results_df['Model'] == model]['RMSE']
         plt.bar(x + i * width,
@@ -279,11 +282,24 @@ def plot_summary(results_df, out_path):
                 width=width,
                 label=model,
                 color=colors[i % len(colors)])
-        plt.xticks(x + width * (len(models) - 1) / 2, datasets)
+    plt.xticks(x + width * (len(models) - 1) / 2, datasets)
     plt.xlabel('Dataset')
     plt.ylabel('RMSE')
     plt.title('RMSE Comparison')
-    plt.legend()
+
+    # R²
+    plt.subplot(1, 3, 3)
+    for i, model in enumerate(models):
+        vals = results_df[results_df['Model'] == model]['R2']
+        plt.bar(x + i * width,
+                vals,
+                width=width,
+                label=model,
+                color=colors[i % len(colors)])
+    plt.xticks(x + width * (len(models) - 1) / 2, datasets)
+    plt.xlabel('Dataset')
+    plt.ylabel('R²')
+    plt.title('R² Comparison')
 
     plt.tight_layout()
     plt.savefig(out_path, dpi=200)
