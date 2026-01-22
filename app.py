@@ -12,6 +12,10 @@ from PyPDF2 import PdfReader
 
 app = Flask(__name__)
 
+SEQ_LENGTH = 30
+N_SENSORS = 14
+IMPORTANT_SENSORS = [2, 3, 4, 7, 8, 9, 11, 12, 13, 14, 15, 17, 20, 21]
+
 def get_all_models(base_dir="saved_models"):
     model_paths = {}
     for root, dirs, files in os.walk(base_dir):
@@ -55,18 +59,28 @@ def extract_pdf_data(pdf_file):
             numbers.append(float(token))
         except ValueError:
             continue
-    if len(numbers) < 210:
+    required = SEQ_LENGTH * N_SENSORS
+    if len(numbers) < required:
         raise ValueError("Not enough numeric data found in the PDF (expected 210 values).")
-    arr = np.array(numbers[:210], dtype=np.float32).reshape(1, 10, 21)
+    arr = np.array(numbers[:required], dtype=np.float32).reshape(1, SEQ_LENGTH, N_SENSORS)
     return arr
 
 def extract_csv_data(csv_file):
     """Extract numeric sensor data from uploaded CSV file."""
     df = pd.read_csv(csv_file, header=None)
+
+    # Case 1: 2D table with >=30 rows, >=14 cols
+    if df.shape[0] >= SEQ_LENGTH and df.shape[1] >= N_SENSORS:
+        sub = df.iloc[:SEQ_LENGTH, :N_SENSORS]
+        arr = sub.to_numpy(dtype=np.float32).reshape(1, SEQ_LENGTH, N_SENSORS)
+        return arr
+
+    # Case 2: flat vector
     values = df.values.flatten()
-    if len(values) < 210:
-        raise ValueError("Not enough data in CSV (expected at least 210 values).")
-    arr = np.array(values[:210], dtype=np.float32).reshape(1, 10, 21)
+    required = SEQ_LENGTH * N_SENSORS
+    if len(values) < required:
+        raise ValueError(f"Not enough data in CSV (expected at least {required} values).")
+    arr = np.array(values[:required], dtype=np.float32).reshape(1, SEQ_LENGTH, N_SENSORS)
     return arr
 
 def get_dataset_sample(dataset, model_name):
@@ -87,11 +101,14 @@ def get_dataset_sample(dataset, model_name):
     with open(file_path, "r") as f:
         for line in f:
             vals = line.strip().split()
-            # Sensors start from column 2 (index 2 to 22: total 21 sensors)
-            sensors = vals[2:23]
-            data.append([float(x) for x in sensors])
-    # get first 10 rows as sample arbitrarily
-    sample_array = np.array(data[:10], dtype=np.float32).reshape(1, 10, 21)
+            # Sensors start from column 2 (index 2 to 22: total 14 sensors)
+            sensors = [float(vals[4 + s]) for s in IMPORTANT_SENSORS]
+            data.append(sensors)
+
+    if len(data) < SEQ_LENGTH:
+        raise ValueError(f"Test file {file_path} has fewer than {SEQ_LENGTH} timesteps.")
+
+    sample_array = np.array(data[:SEQ_LENGTH], dtype=np.float32).reshape(1, SEQ_LENGTH, N_SENSORS)
     return sample_array
 
 
@@ -108,7 +125,7 @@ def home():
                 input_data = get_dataset_sample(dataset, model_name)
 
             elif input_option == "random":
-                input_data = np.random.rand(1,10,21).astype(np.float32)
+                input_data = np.random.rand(1,30,14).astype(np.float32)
 
             elif input_option == "csv":
                 csv_file = request.files.get("csv_file")
