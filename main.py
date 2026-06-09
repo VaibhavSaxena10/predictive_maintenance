@@ -1,3 +1,4 @@
+
 import os
 import numpy as np
 import pandas as pd
@@ -16,8 +17,6 @@ from tensorflow.keras.callbacks import EarlyStopping, Callback, ReduceLROnPlatea
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.regularizers import l2
 
-
-# =================== CONFIG ===================
 
 SEQ_LENGTH = 30          ### CHANGED: longer window for more context
 BATCH_SIZE = 32
@@ -118,6 +117,9 @@ def make_sequences_regime(df,
     if USE_SMOOTHING:
         df = smooth_sensors(df, sensor_cols, window=SMOOTHING_WINDOW)
 
+    # ensure sensor columns are float so scaled values can be assigned back
+    df[sensor_cols] = df[sensor_cols].astype('float64')
+
     scalers = {}
     for r in df['regime'].unique():
         mask = df['regime'] == r
@@ -173,7 +175,7 @@ def plot_training_curves(history, model_name, dataset_name, out_dir):
     out_path = os.path.join(out_dir, f"{model_name}_accuracy_curve_{dataset_name}.png")
     plt.savefig(out_path, dpi=200)
     plt.close()
-    print(f"📊 Saved training curve for {model_name} → {out_path}")
+    print(f"[PLOT] Saved training curve for {model_name} -> {out_path}")
 
 
 def plot_training_curves_from_csv(csv_file, model_name, dataset_name, out_dir):
@@ -197,7 +199,7 @@ def plot_training_curves_from_csv(csv_file, model_name, dataset_name, out_dir):
     out_path = os.path.join(out_dir, f"{model_name}_accuracy_curve_{dataset_name}.png")
     plt.savefig(out_path, dpi=200)
     plt.close()
-    print(f"📊 Saved training curve from CSV for {model_name} → {out_path}")
+    print(f"[PLOT] Saved training curve from CSV for {model_name} -> {out_path}")
 
 
 # =================== COLOR-CHANGED PLOTS ===================
@@ -242,7 +244,7 @@ def plot_model_rul_comparison(all_preds_dict, out_path):
     plt.tight_layout()
     plt.savefig(out_path, dpi=200, bbox_inches='tight')
     plt.close()
-    print(f"📊 Saved Model RUL Comparison → {out_path}")
+    print(f"[PLOT] Saved Model RUL Comparison -> {out_path}")
 
 
 def plot_summary(results_df, out_path):
@@ -304,7 +306,7 @@ def plot_summary(results_df, out_path):
     plt.tight_layout()
     plt.savefig(out_path, dpi=200)
     plt.close()
-    print(f"📊 Saved final summary plot → {out_path}")
+    print(f"[PLOT] Saved final summary plot -> {out_path}")
 
 
 # =================== MODELS ===================
@@ -326,7 +328,7 @@ class LiveAccuracyTrackerCSV(Callback):
             "val_mae": logs.get('val_mae')
         }
         self.logs_list.append(epoch_log)
-        print(f"🟩 Epoch {epoch_log['epoch']:02d} | Loss: {epoch_log['loss']:.4f} | "
+        print(f"[Epoch {epoch_log['epoch']:02d}] Loss: {epoch_log['loss']:.4f} | "
               f"Val Loss: {epoch_log['val_loss']:.4f} | MAE: {epoch_log['mae']:.4f} | Val MAE: {epoch_log['val_mae']:.4f}")
         pd.DataFrame(self.logs_list).to_csv(self.out_file, index=False)
 
@@ -434,10 +436,10 @@ all_preds_dict = {}
 lr_scheduler = ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=3, verbose=1)
 
 for ds in DATASETS:
-    print(f"\n🚀 Processing Dataset: {ds}")
-    file_path = os.path.join("Data", f"train_{ds}.txt")
+    print(f"\n[>>] Processing Dataset: {ds}")
+    file_path = os.path.join("data", f"train_{ds}.txt")
     if not os.path.exists(file_path):
-        print(f"❌ {file_path} not found. Skipping.")
+        print(f"[X] {file_path} not found. Skipping.")
         continue
 
     df = load_cmapss_train_adv(file_path, max_rul=MAX_RUL)
@@ -478,14 +480,14 @@ for ds in DATASETS:
     models = {}
     for name, path in paths.items():
         if os.path.exists(path):
-            print(f"📂 Loading {name} model for {ds}")
+            print(f"[LOAD] Loading {name} model for {ds}")
             models[name] = load_model(path, compile=False)
             models[name].compile(optimizer='adam', loss='mse', metrics=['mae'])
             csv_file = os.path.join(ds_result_dir, f"{name}_live_metrics_{ds}.csv")
             if os.path.exists(csv_file):
                 plot_training_curves_from_csv(csv_file, name, ds, ds_result_dir)
         else:
-            print(f"🧠 Building new {name} model for {ds}")
+            print(f"[BUILD] Building new {name} model for {ds}")
             if name == 'LSTM':
                 models[name] = build_lstm((X.shape[1], X.shape[2]))
             elif name == 'GRU':
@@ -495,7 +497,7 @@ for ds in DATASETS:
 
     for name, model in models.items():
         if not os.path.exists(paths[name]):
-            print(f"🏋️‍♂️ Training {name} on {ds} ...")
+            print(f"[TRAIN] Training {name} on {ds} ...")
             cb = EarlyStopping(monitor='val_loss', patience=6, restore_best_weights=True)
             csv_tracker_path = os.path.join(ds_result_dir, f"{name}_live_metrics_{ds}.csv")
             history = model.fit(
@@ -507,29 +509,29 @@ for ds in DATASETS:
                 verbose=0
             )
             model.save(paths[name])
-            print(f"✅ Saved {name} model to {paths[name]}")
+            print(f"[SAVED] Saved {name} model to {paths[name]}")
             plot_training_curves(history, name, ds, ds_result_dir)
 
     preds = {}
     for name, model in models.items():
-        print(f"🔍 Evaluating {name} on {ds} ...")
+        print(f"[EVAL] Evaluating {name} on {ds} ...")
         y_pred = model.predict(X_val, batch_size=BATCH_SIZE)
         preds[name] = y_pred.flatten()
         mae = mean_absolute_error(y_val, y_pred)
         rmse = np.sqrt(mean_squared_error(y_val, y_pred))
         r2 = r2_score(y_val, y_pred)
         all_results.append([ds, name, mae, rmse, r2])
-        print(f"📈 {name} Results → MAE: {mae:.3f} | RMSE: {rmse:.3f} | R²: {r2:.3f}")
+        print(f"[RESULT] {name} Results -> MAE: {mae:.3f} | RMSE: {rmse:.3f} | R2: {r2:.3f}")
     all_preds_dict[ds] = preds
 
     plot_path = os.path.join(ds_result_dir, f"rul_comparison_{ds}.png")
     save_plot(y_val, preds, plot_path)
-    print(f"🖼️ Saved RUL comparison plot → {plot_path}")
+    print(f"[PLOT] Saved RUL comparison plot -> {plot_path}")
 
 results_df = pd.DataFrame(all_results, columns=['Dataset', 'Model', 'MAE', 'RMSE', 'R2'])
 csv_out = os.path.join(RESULTS_DIR, "all_datasets_comparison.csv")
 results_df.to_csv(csv_out, index=False)
-print(f"\n✅ All done! Consolidated results saved → {csv_out}")
+print(f"\n[DONE] All done! Consolidated results saved -> {csv_out}")
 
 summary_plot_path = os.path.join(RESULTS_DIR, "summary_mae_rmse_comparison.png")
 plot_summary(results_df, summary_plot_path)

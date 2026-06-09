@@ -101,7 +101,10 @@ def get_dataset_sample(dataset, model_name):
     with open(file_path, "r") as f:
         for line in f:
             vals = line.strip().split()
-            # Sensors start from column 2 (index 2 to 22: total 14 sensors)
+            if len(vals) < 26:
+                continue
+            # cols: engine_id, cycle, op1, op2, op3, sensor_1..sensor_21
+            # sensor_i is at index 4+i (1-indexed sensors start at col index 5)
             sensors = [float(vals[4 + s]) for s in IMPORTANT_SENSORS]
             data.append(sensors)
 
